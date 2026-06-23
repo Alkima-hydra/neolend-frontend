@@ -1,36 +1,43 @@
 import { NavLink } from "react-router-dom";
+import {
+  User, FileText, CreditCard, BarChart2, Database, CheckCircle,
+  DollarSign, BookOpen, Search, TrendingUp, Layers, Handshake,
+  PieChart, Shield, ClipboardList, Users
+} from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import styles from "./Sidebar.module.css";
 
 const ROLE_MENUS = {
   SOLICITANTE: [
-    { label: "Mi Perfil",           to: "/applicant/profile",              icon: "👤" },
-    { label: "Subir Documento",     to: "/applicant/upload-document",       icon: "📄" },
-    { label: "Solicitar Crédito",   to: "/applicant/apply",                 icon: "💳" },
-    { label: "Estado de Solicitud", to: "/applicant/application-status",    icon: "📊" },
-    { label: "Datos Externos",      to: "/applicant/external-data-summary", icon: "🔗" },
-    { label: "Resultado",           to: "/applicant/result",                icon: "✅" },
-    { label: "Desembolso",          to: "/applicant/disbursement",          icon: "💰" },
-    { label: "Mi Préstamo",         to: "/applicant/loan-status",           icon: "📋" },
-    { label: "Educación",           to: "/applicant/education",             icon: "🎓" },
+    { label: "Mi Perfil",             to: "/applicant/profile",              Icon: User },
+    { label: "Solicitar Crédito",     to: "/applicant/apply",                Icon: CreditCard },
+    { label: "Estado de Solicitud",   to: "/applicant/application-status",   Icon: BarChart2 },
+    { label: "Datos Externos",        to: "/applicant/external-data-summary",Icon: Database },
+    { label: "Resultado",             to: "/applicant/result",               Icon: CheckCircle },
+    { label: "Desembolso",            to: "/applicant/disbursement",         Icon: DollarSign },
+    { label: "Mi Préstamo",           to: "/applicant/loan-status",          Icon: FileText },
+    { label: "Educación Financiera",  to: "/applicant/education",            Icon: BookOpen },
   ],
   ANALISTA: [
-    { label: "Revisión Manual",     to: "/analyst/review",                  icon: "🔍" },
-    { label: "Explicación Scoring", to: "/analyst/scoring-explanation",     icon: "📈" },
+    { label: "Revisión Manual",       to: "/analyst/review",                 Icon: Search },
+    { label: "Explicación Scoring",   to: "/analyst/scoring-explanation",    Icon: TrendingUp },
   ],
   GESTOR_COBRANZA: [
-    { label: "Dashboard Cobranza",  to: "/collections/dashboard",           icon: "📂" },
-    { label: "Acuerdos de Pago",    to: "/collections/payment-agreements",  icon: "🤝" },
+    { label: "Cartera de Cobranza",   to: "/collections/dashboard",          Icon: Layers },
+    { label: "Acuerdos de Pago",      to: "/collections/payment-agreements", Icon: Handshake },
   ],
   INVERSIONISTA: [
-    { label: "Dashboard Inversión", to: "/investor/dashboard",              icon: "📉" },
+    { label: "Dashboard Inversión",   to: "/investor/dashboard",             Icon: PieChart },
   ],
   REGULADOR: [
-    { label: "Auditoría",           to: "/regulator/audit",                 icon: "🏛️" },
-    { label: "Fraude",              to: "/fraud",                           icon: "🛡️" },
+    { label: "Auditoría",             to: "/regulator/audit",                Icon: ClipboardList },
+    { label: "Detección Fraude",      to: "/fraud",                          Icon: Shield },
   ],
   COMERCIO: [
-    { label: "Mi Perfil",           to: "/applicant/profile",              icon: "🏪" },
+    { label: "Mi Perfil",             to: "/applicant/profile",              Icon: User },
+  ],
+  ADMIN: [
+    { label: "Gestión de Usuarios",   to: "/admin/users",                    Icon: Users },
   ],
 };
 
@@ -42,7 +49,7 @@ export default function Sidebar() {
 
   return (
     <aside className={styles.sidebar}>
-      <div className={styles.section}>Menú</div>
+      <div className={styles.section}>Navegación</div>
       {menu.map((item) => (
         <NavLink
           key={item.to}
@@ -51,7 +58,7 @@ export default function Sidebar() {
             `${styles.link}${isActive ? " " + styles.active : ""}`
           }
         >
-          <span className={styles.icon}>{item.icon}</span>
+          <item.Icon className={styles.icon} />
           {item.label}
         </NavLink>
       ))}

@@ -1,36 +1,32 @@
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "react-router-dom";
+import { Plus, ArrowRight } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { getApplicantByUserId, getApplicationsByApplicant } from "../../api/api";
 import styles from "../shared.module.css";
 
-const STATUS_COLORS = {
-  CREATED:       styles.badgeBlue,
-  DATA_COLLECTING: styles.badgeBlue,
-  SCORING:       styles.badgeYellow,
-  APPROVED:      styles.badgeGreen,
-  REJECTED:      styles.badgeRed,
-  MANUAL_REVIEW: styles.badgeYellow,
-  DISBURSED:     styles.badgeGreen,
-};
-
-const STATUS_LABELS = {
-  CREATED: "Creada", DATA_COLLECTING: "Recolectando datos", SCORING: "En scoring",
-  APPROVED: "Aprobada", REJECTED: "Rechazada", MANUAL_REVIEW: "Revisión manual", DISBURSED: "Desembolsada",
+const STATUS_MAP = {
+  CREATED:          { label: "Creada",               cls: styles.badgeBlue },
+  DATA_COLLECTING:  { label: "Recolectando datos",   cls: styles.badgeBlue },
+  SCORING:          { label: "En scoring",            cls: styles.badgeYellow },
+  APPROVED:         { label: "Aprobada",              cls: styles.badgeGreen },
+  REJECTED:         { label: "Rechazada",             cls: styles.badgeRed },
+  MANUAL_REVIEW:    { label: "Revisión manual",       cls: styles.badgeYellow },
+  DISBURSED:        { label: "Desembolsada",          cls: styles.badgeGreen },
 };
 
 export default function ApplicationStatusPage() {
   const { user } = useAuth();
   const location = useLocation();
   const [applications, setApplications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState("");
 
   useEffect(() => {
     getApplicantByUserId(user.id)
       .then((a) => getApplicationsByApplicant(a.id))
       .then(setApplications)
-      .catch(() => setError("No se encontraron solicitudes"))
+      .catch(() => setError("No se pudieron cargar las solicitudes"))
       .finally(() => setLoading(false));
   }, [user.id]);
 
@@ -40,59 +36,63 @@ export default function ApplicationStatusPage() {
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.pageTitle}>Estado de Solicitudes</h1>
-      <p className={styles.pageSubtitle}>Seguimiento de tus solicitudes de crédito</p>
+      <div className={styles.pageHeader}>
+        <h1 className={styles.pageTitle}>Estado de Solicitudes</h1>
+        <p className={styles.pageSubtitle}>Seguimiento de tus solicitudes de crédito</p>
+      </div>
 
       {newApp && (
         <div className={styles.success}>
-          ✅ Solicitud creada exitosamente (ID: {newApp.id}). Iniciando proceso de evaluación.
+          Solicitud enviada correctamente (ID: {newApp.id}). Iniciando proceso de evaluación.
         </div>
       )}
-
       {error && <div className={styles.error}>{error}</div>}
 
       {applications.length === 0 ? (
-        <div className={styles.card} style={{ textAlign: "center", color: "#64748b" }}>
-          No tienes solicitudes aún.{" "}
-          <Link to="/applicant/apply" style={{ color: "#38bdf8" }}>Solicita tu primer crédito →</Link>
+        <div className={styles.card} style={{ textAlign: "center", padding: "2.5rem" }}>
+          <p style={{ color: "#94a3b8", marginBottom: "1rem" }}>No tienes solicitudes registradas.</p>
+          <Link to="/applicant/apply">
+            <button className={styles.btnPrimary}>
+              <Plus size={14} /> Nueva solicitud
+            </button>
+          </Link>
         </div>
       ) : (
-        applications.map((app) => (
-          <div className={styles.card} key={app.id}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
-              <div>
-                <div style={{ fontWeight: 700, color: "#f1f5f9", marginBottom: 4 }}>{app.purpose}</div>
-                <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                  Creada: {new Date(app.createdAt).toLocaleDateString()}
+        applications.map((app) => {
+          const s = STATUS_MAP[app.status] || { label: app.status, cls: styles.badgeGray };
+          return (
+            <div className={styles.card} key={app.id}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
+                <div>
+                  <div style={{ fontWeight: 600, color: "#0f172a", marginBottom: 3 }}>{app.purpose}</div>
+                  <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+                    Creada: {new Date(app.createdAt).toLocaleDateString()}
+                  </div>
                 </div>
+                <span className={`${styles.badge} ${s.cls}`}>{s.label}</span>
               </div>
-              <span className={`${styles.badge} ${STATUS_COLORS[app.status] || styles.badgeGray}`}>
-                {STATUS_LABELS[app.status] || app.status}
-              </span>
-            </div>
-            <div className={styles.grid3}>
-              <div className={styles.infoRow} style={{ flexDirection: "column", gap: 2 }}>
-                <span className={styles.infoLabel}>Monto solicitado</span>
-                <span className={styles.infoValue}>USD {app.requestedAmount.toLocaleString()}</span>
+              <div className={styles.grid3} style={{ marginBottom: "0.75rem" }}>
+                {[
+                  ["Monto solicitado", `USD ${app.requestedAmount.toLocaleString()}`],
+                  ["Plazo",           `${app.termMonths} meses`],
+                  ["Moneda",          app.currency],
+                ].map(([k, v]) => (
+                  <div key={k}>
+                    <div style={{ fontSize: "0.7rem", color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", marginBottom: 2 }}>{k}</div>
+                    <div style={{ fontWeight: 600, color: "#0f172a" }}>{v}</div>
+                  </div>
+                ))}
               </div>
-              <div className={styles.infoRow} style={{ flexDirection: "column", gap: 2 }}>
-                <span className={styles.infoLabel}>Plazo</span>
-                <span className={styles.infoValue}>{app.termMonths} meses</span>
-              </div>
-              <div className={styles.infoRow} style={{ flexDirection: "column", gap: 2 }}>
-                <span className={styles.infoLabel}>Moneda</span>
-                <span className={styles.infoValue}>{app.currency}</span>
-              </div>
-            </div>
-            {app.status === "APPROVED" && (
-              <div className={styles.btnRow}>
-                <Link to="/applicant/result" style={{ textDecoration: "none" }}>
-                  <button className={styles.btnPrimary}>Ver resultado →</button>
+              {app.status === "APPROVED" && (
+                <Link to="/applicant/result">
+                  <button className={styles.btnPrimary} style={{ fontSize: "0.8125rem" }}>
+                    Ver resultado <ArrowRight size={13} />
+                  </button>
                 </Link>
-              </div>
-            )}
-          </div>
-        ))
+              )}
+            </div>
+          );
+        })
       )}
     </div>
   );

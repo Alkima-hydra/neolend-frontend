@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
+import { LogOut } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import styles from "./Navbar.module.css";
 
@@ -14,13 +15,16 @@ export default function Navbar() {
   return (
     <nav className={styles.navbar}>
       <Link to="/" className={styles.brand}>
-        Neo<span>Lend</span>
+        Neo<span className={styles.brandDot}>Lend</span>
       </Link>
       {user && (
         <div className={styles.right}>
           <span className={styles.userName}>{user.fullName}</span>
-          <span className={styles.roleBadge}>{user.role}</span>
-          <button className={styles.logoutBtn} onClick={handleLogout}>Salir</button>
+          <span className={styles.roleBadge}>{user.role.replace("_", " ")}</span>
+          <button className={styles.logoutBtn} onClick={handleLogout}>
+            <LogOut size={14} />
+            Salir
+          </button>
         </div>
       )}
     </nav>

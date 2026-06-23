@@ -4,13 +4,13 @@ import { getApplicantByUserId, getApplicationsByApplicant, getExternalDataSummar
 import styles from "../shared.module.css";
 
 function ScoreBar({ label, value, max = 100 }) {
-  const pct = Math.min((value / max) * 100, 100);
-  const color = value >= 80 ? "#4ade80" : value >= 60 ? "#fbbf24" : "#f87171";
+  const pct   = Math.min((value / max) * 100, 100);
+  const color = value >= 80 ? "#16a34a" : value >= 60 ? "#d97706" : "#dc2626";
   return (
-    <div style={{ marginBottom: "0.75rem" }}>
+    <div style={{ marginBottom: "0.875rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-        <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>{label}</span>
-        <span style={{ fontSize: "0.8rem", fontWeight: 700, color }}>{value}</span>
+        <span style={{ fontSize: "0.8125rem", color: "#475569" }}>{label}</span>
+        <span style={{ fontSize: "0.8125rem", fontWeight: 700, color }}>{value}</span>
       </div>
       <div className={styles.progressBar}>
         <div className={styles.progressFill} style={{ width: `${pct}%`, background: color }} />
@@ -21,16 +21,16 @@ function ScoreBar({ label, value, max = 100 }) {
 
 export default function ExternalDataSummaryPage() {
   const { user } = useAuth();
-  const [data, setData] = useState(null);
+  const [data, setData]     = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError]   = useState("");
 
   useEffect(() => {
     getApplicantByUserId(user.id)
       .then((a) => getApplicationsByApplicant(a.id))
       .then((apps) => {
-        const app = apps.find((a) => a.status === "APPROVED" || a.status === "MANUAL_REVIEW") || apps[0];
-        if (!app) throw new Error("Sin solicitudes");
+        const app = apps.find((a) => ["APPROVED","MANUAL_REVIEW","REJECTED"].includes(a.status)) || apps[0];
+        if (!app) throw new Error("Sin solicitudes para mostrar datos externos");
         return getExternalDataSummary(app.id);
       })
       .then(setData)
@@ -39,20 +39,22 @@ export default function ExternalDataSummaryPage() {
   }, [user.id]);
 
   if (loading) return <div className={styles.loading}>Consultando fuentes externas...</div>;
-  if (error) return <div className={styles.error}>{error}</div>;
+  if (error)   return <div className={styles.error}>{error}</div>;
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.pageTitle}>Datos Externos</h1>
-      <p className={styles.pageSubtitle}>Fuentes de datos alternativos utilizadas en tu evaluación</p>
+      <div className={styles.pageHeader}>
+        <h1 className={styles.pageTitle}>Resumen de Datos Externos</h1>
+        <p className={styles.pageSubtitle}>Fuentes de datos alternativos consultadas durante tu evaluación crediticia</p>
+      </div>
 
       <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Scores por fuente de datos</h3>
-        <ScoreBar label="Buró de crédito" value={data.creditBureauScore} max={850} />
-        <ScoreBar label="Pagos de servicios" value={data.utilityPaymentScore} />
-        <ScoreBar label="Billetera digital" value={data.walletTransactionScore} />
-        <ScoreBar label="E-commerce" value={data.ecommerceScore} />
-        <ScoreBar label="Recargas móviles" value={data.mobileTopupScore} />
+        <h3 className={styles.cardTitle}>Puntajes por fuente</h3>
+        <ScoreBar label="Buró de crédito"      value={data.creditBureauScore}    max={850} />
+        <ScoreBar label="Pagos de servicios"   value={data.utilityPaymentScore} />
+        <ScoreBar label="Billetera digital"    value={data.walletTransactionScore} />
+        <ScoreBar label="E-commerce"           value={data.ecommerceScore} />
+        <ScoreBar label="Recargas móviles"     value={data.mobileTopupScore} />
       </div>
 
       <div className={styles.grid2}>
@@ -84,7 +86,7 @@ export default function ExternalDataSummaryPage() {
           <h3 className={styles.cardTitle}>Servicios públicos</h3>
           {Object.entries(data.utilities).map(([k, v]) => (
             <div className={styles.infoRow} key={k}>
-              <span className={styles.infoLabel}>{k}</span>
+              <span className={styles.infoLabel} style={{ textTransform: "capitalize" }}>{k}</span>
               <span className={`${styles.badge} ${v === "ON_TIME" ? styles.badgeGreen : styles.badgeYellow}`}>{v}</span>
             </div>
           ))}
@@ -93,7 +95,7 @@ export default function ExternalDataSummaryPage() {
         <div className={styles.card}>
           <h3 className={styles.cardTitle}>Billetera digital</h3>
           <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Transacciones/mes</span>
+            <span className={styles.infoLabel}>Transacciones / mes</span>
             <span className={styles.infoValue}>{data.wallet.monthlyTransactions}</span>
           </div>
           <div className={styles.infoRow}>
@@ -113,6 +115,10 @@ export default function ExternalDataSummaryPage() {
             <span className={`${styles.badge} ${data.ecommerce.chargebacks === 0 ? styles.badgeGreen : styles.badgeRed}`}>
               {data.ecommerce.chargebacks}
             </span>
+          </div>
+          <div className={styles.infoRow}>
+            <span className={styles.infoLabel}>Recargas</span>
+            <span className={styles.infoValue}>{data.mobileTopups.frequency} — {data.mobileTopups.consistency}</span>
           </div>
         </div>
       </div>

@@ -27,6 +27,7 @@ import InvestorDashboard from "./pages/Investor/InvestorDashboard";
 import FraudPage from "./pages/Fraud/FraudPage";
 
 import AuditPage from "./pages/Regulator/AuditPage";
+import UsersPage from "./pages/Admin/UsersPage";
 
 function UnauthorizedPage() {
   return (
@@ -144,6 +145,13 @@ export default function App() {
           <Route path="/regulator/audit" element={
             <ProtectedRoute allowedRoles={["REGULADOR"]}>
               <WithLayout><AuditPage /></WithLayout>
+            </ProtectedRoute>
+          } />
+
+          {/* Admin */}
+          <Route path="/admin/users" element={
+            <ProtectedRoute allowedRoles={["ADMIN"]}>
+              <WithLayout><UsersPage /></WithLayout>
             </ProtectedRoute>
           } />
         </Routes>

@@ -1,24 +1,36 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Landmark } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import styles from "./LoginPage.module.css";
 
 const ROLE_HOME = {
-  SOLICITANTE: "/applicant/profile",
-  ANALISTA: "/analyst/review",
+  SOLICITANTE:     "/applicant/profile",
+  ANALISTA:        "/analyst/review",
   GESTOR_COBRANZA: "/collections/dashboard",
-  INVERSIONISTA: "/investor/dashboard",
-  REGULADOR: "/regulator/audit",
-  COMERCIO: "/applicant/profile",
+  INVERSIONISTA:   "/investor/dashboard",
+  REGULADOR:       "/regulator/audit",
+  COMERCIO:        "/applicant/profile",
+  ADMIN:           "/admin/users",
 };
+
+
+const DEMO_USERS = [
+  { role: "Solicitante",  email: "juan.solicitante@neolend.com" },
+  { role: "Analista",     email: "maria.analista@neolend.com" },
+  { role: "Cobranza",     email: "carlos.cobranza@neolend.com" },
+  { role: "Inversionista",email: "fondo.andino@neolend.com" },
+  { role: "Regulador",    email: "regulador@superintendencia.gob" },
+  { role: "Admin",        email: "admin@neolend.com" },
+];
 
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError]       = useState("");
+  const [loading, setLoading]   = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -34,8 +46,8 @@ export default function LoginPage() {
     }
   }
 
-  function quickLogin(email) {
-    setEmail(email);
+  function quickLogin(e) {
+    setEmail(e);
     setPassword("demo123");
   }
 
@@ -43,6 +55,9 @@ export default function LoginPage() {
     <div className={styles.page}>
       <div className={styles.card}>
         <div className={styles.logo}>
+          <div className={styles.logoMark}>
+            <Landmark size={24} color="#fff" />
+          </div>
           <h1>Neo<span>Lend</span></h1>
           <p>Plataforma de Crédito Digital</p>
         </div>
@@ -50,23 +65,11 @@ export default function LoginPage() {
         <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.field}>
             <label>Correo electrónico</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="usuario@neolend.com"
-              required
-            />
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="usuario@neolend.com" required autoFocus />
           </div>
           <div className={styles.field}>
             <label>Contraseña</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-            />
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Contraseña" required />
           </div>
           {error && <div className={styles.error}>{error}</div>}
           <button className={styles.submitBtn} type="submit" disabled={loading}>
@@ -75,30 +78,22 @@ export default function LoginPage() {
         </form>
 
         <div className={styles.footer}>
-          ¿No tienes cuenta? <Link to="/register">Regístrate</Link>
+          Sin cuenta? <Link to="/register">Regístrate aquí</Link>
         </div>
 
+        <div className={styles.divider}>accesos demo</div>
+
         <div className={styles.hints}>
-          <p>Accesos de demo (contraseña: demo123)</p>
-          <ul>
-            {[
-              ["Solicitante", "juan.solicitante@neolend.com"],
-              ["Analista",    "maria.analista@neolend.com"],
-              ["Cobranza",    "carlos.cobranza@neolend.com"],
-              ["Inversionista","fondo.andino@neolend.com"],
-              ["Regulador",   "regulador@superintendencia.gob"],
-            ].map(([role, e]) => (
-              <li key={e}>
-                <button
-                  type="button"
-                  onClick={() => quickLogin(e)}
-                  style={{ background: "none", border: "none", color: "#38bdf8", cursor: "pointer", padding: 0, fontSize: "0.75rem" }}
-                >
-                  {role}: {e}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className={styles.hintsTitle}>Usuarios de prueba — contraseña: demo123</div>
+          {DEMO_USERS.map(({ role, email: e }) => (
+            <div className={styles.hintItem} key={e}>
+              <span className={styles.hintRole}>{role}</span>
+              <span style={{ color: "#94a3b8", fontSize: "0.7rem", flex: 1 }}>{e}</span>
+              <button type="button" className={styles.quickBtn} onClick={() => quickLogin(e)}>
+                Usar
+              </button>
+            </div>
+          ))}
         </div>
       </div>
     </div>

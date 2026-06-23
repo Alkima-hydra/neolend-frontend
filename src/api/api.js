@@ -4,15 +4,16 @@ const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms));
 
 // ─── Seed data ────────────────────────────────────────────────────────────────
 
-const USERS = [
-  { id: "u1", email: "juan.solicitante@neolend.com", password: "demo123", role: "SOLICITANTE", fullName: "Juan Pérez Solicitante" },
-  { id: "u2", email: "maria.analista@neolend.com",   password: "demo123", role: "ANALISTA",    fullName: "María López Analista" },
-  { id: "u3", email: "carlos.cobranza@neolend.com",  password: "demo123", role: "GESTOR_COBRANZA", fullName: "Carlos Rojas Cobranza" },
-  { id: "u4", email: "fondo.andino@neolend.com",     password: "demo123", role: "INVERSIONISTA",  fullName: "Fondo Andino Capital" },
-  { id: "u5", email: "regulador@superintendencia.gob", password: "demo123", role: "REGULADOR", fullName: "Superintendencia Demo" },
-  { id: "u6", email: "neostore@commerce.com",        password: "demo123", role: "COMERCIO",   fullName: "NeoStore Comercio" },
-  { id: "u7", email: "ana.solicitante@neolend.com",  password: "demo123", role: "SOLICITANTE", fullName: "Ana Gómez Solicitante" },
-  { id: "u8", email: "luis.solicitante@neolend.com", password: "demo123", role: "SOLICITANTE", fullName: "Luis Fernández Solicitante" },
+let USERS = [
+  { id: "u1",    email: "juan.solicitante@neolend.com",     password: "demo123", role: "SOLICITANTE",     fullName: "Juan Pérez Solicitante",   status: "ACTIVE",   createdAt: "2026-01-10T08:00:00Z" },
+  { id: "u2",    email: "maria.analista@neolend.com",       password: "demo123", role: "ANALISTA",        fullName: "María López Analista",      status: "ACTIVE",   createdAt: "2026-01-10T08:00:00Z" },
+  { id: "u3",    email: "carlos.cobranza@neolend.com",      password: "demo123", role: "GESTOR_COBRANZA", fullName: "Carlos Rojas Cobranza",     status: "ACTIVE",   createdAt: "2026-01-10T08:00:00Z" },
+  { id: "u4",    email: "fondo.andino@neolend.com",         password: "demo123", role: "INVERSIONISTA",   fullName: "Fondo Andino Capital",      status: "ACTIVE",   createdAt: "2026-01-10T08:00:00Z" },
+  { id: "u5",    email: "regulador@superintendencia.gob",   password: "demo123", role: "REGULADOR",       fullName: "Superintendencia Demo",     status: "ACTIVE",   createdAt: "2026-01-10T08:00:00Z" },
+  { id: "u6",    email: "neostore@commerce.com",            password: "demo123", role: "COMERCIO",        fullName: "NeoStore Comercio",         status: "ACTIVE",   createdAt: "2026-01-10T08:00:00Z" },
+  { id: "u7",    email: "ana.solicitante@neolend.com",      password: "demo123", role: "SOLICITANTE",     fullName: "Ana Gómez Solicitante",     status: "ACTIVE",   createdAt: "2026-01-11T08:00:00Z" },
+  { id: "u8",    email: "luis.solicitante@neolend.com",     password: "demo123", role: "SOLICITANTE",     fullName: "Luis Fernández Solicitante",status: "ACTIVE",   createdAt: "2026-01-12T08:00:00Z" },
+  { id: "u9",    email: "admin@neolend.com",                password: "demo123", role: "ADMIN",           fullName: "Administrador NeoLend",     status: "ACTIVE",   createdAt: "2026-01-01T08:00:00Z" },
 ];
 
 const APPLICANTS = {
@@ -330,4 +331,45 @@ export async function getDecisionAudit(applicationId) {
 export async function getRegulatoryReport() {
   await delay();
   return { reportPeriod: "2026-06", regulatorName: "Superintendencia de Bancos Demo", reportUrl: "https://storage.neolend.local/reports/regulatory-report-2026-06.pdf", generatedAt: "2026-06-23T00:00:00Z", totalApplications: 3, approved: 1, rejected: 1, manualReview: 1, defaultRate: 0, averageScore: 640 };
+}
+
+// ─── Admin API ────────────────────────────────────────────────────────────────
+
+export async function getAllUsers() {
+  await delay();
+  return USERS.map(({ password: _, ...u }) => u);
+}
+
+export async function createUser(data) {
+  await delay(500);
+  if (USERS.find((u) => u.email === data.email)) throw new Error("El correo ya está registrado");
+  const newUser = {
+    id: `u${Date.now()}`,
+    email: data.email,
+    password: data.password || "neolend123",
+    role: data.role,
+    fullName: data.fullName,
+    phone: data.phone || null,
+    status: "ACTIVE",
+    createdAt: new Date().toISOString(),
+  };
+  USERS.push(newUser);
+  const { password: _, ...safe } = newUser;
+  return safe;
+}
+
+export async function updateUserStatus(userId, status) {
+  await delay(300);
+  const user = USERS.find((u) => u.id === userId);
+  if (!user) throw new Error("Usuario no encontrado");
+  user.status = status;
+  return { id: userId, status };
+}
+
+export async function deleteUser(userId) {
+  await delay(300);
+  const idx = USERS.findIndex((u) => u.id === userId);
+  if (idx === -1) throw new Error("Usuario no encontrado");
+  USERS.splice(idx, 1);
+  return { deleted: true };
 }

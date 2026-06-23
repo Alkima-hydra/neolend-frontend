@@ -1,29 +1,31 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { Smartphone, Building2, Store, Banknote, ArrowRight, CheckCircle } from "lucide-react";
 import { getDisbursement, requestDisbursement } from "../../api/api";
 import styles from "../shared.module.css";
+import dStyles from "./DisbursementPage.module.css";
 
 const CHANNELS = [
-  { value: "WALLET",         label: "Billetera digital (Tigo Money / Unitel)",  icon: "📱" },
-  { value: "BANK",           label: "Cuenta bancaria",                           icon: "🏦" },
-  { value: "CORRESPONDENT",  label: "Corresponsal bancario",                     icon: "🏪" },
-  { value: "CASH",           label: "Efectivo",                                  icon: "💵" },
+  { value: "WALLET",        label: "Billetera digital",          sub: "Tigo Money / Unitel",         Icon: Smartphone },
+  { value: "BANK",          label: "Cuenta bancaria",            sub: "Transferencia directa",        Icon: Building2 },
+  { value: "CORRESPONDENT", label: "Corresponsal bancario",      sub: "BancoSol, FIE, Prodem",       Icon: Store },
+  { value: "CASH",          label: "Efectivo",                   sub: "Retiro en punto autorizado",  Icon: Banknote },
 ];
 
-const STATUS_COLOR = {
-  COMPLETED: styles.badgeGreen,
+const STATUS_CLS = {
+  COMPLETED:  styles.badgeGreen,
   PROCESSING: styles.badgeYellow,
-  PENDING: styles.badgeBlue,
-  FAILED: styles.badgeRed,
+  PENDING:    styles.badgeBlue,
+  FAILED:     styles.badgeRed,
 };
 
 export default function DisbursementPage() {
   const [disbursement, setDisbursement] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ channel: "WALLET", destination: "" });
-  const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState("");
-  const [error, setError] = useState("");
+  const [loading, setLoading]           = useState(true);
+  const [form, setForm]                 = useState({ channel: "WALLET", destination: "" });
+  const [submitting, setSubmitting]     = useState(false);
+  const [success, setSuccess]           = useState("");
+  const [error, setError]               = useState("");
 
   useEffect(() => {
     getDisbursement("loan1").then(setDisbursement).catch(() => {}).finally(() => setLoading(false));
@@ -31,12 +33,11 @@ export default function DisbursementPage() {
 
   async function handleRequest(e) {
     e.preventDefault();
-    setSubmitting(true);
-    setError("");
+    setSubmitting(true); setError("");
     try {
       const res = await requestDisbursement("loan1", form.channel, form.destination);
       setDisbursement(res);
-      setSuccess("Solicitud de desembolso enviada. Se procesará en breve.");
+      setSuccess("Solicitud de desembolso enviada. Se procesará en los próximos minutos.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -48,28 +49,28 @@ export default function DisbursementPage() {
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.pageTitle}>Desembolso</h1>
-      <p className={styles.pageSubtitle}>Estado y detalles del desembolso de tu crédito aprobado</p>
+      <div className={styles.pageHeader}>
+        <h1 className={styles.pageTitle}>Desembolso</h1>
+        <p className={styles.pageSubtitle}>Recibe tu crédito aprobado a través del canal de tu preferencia</p>
+      </div>
 
       {disbursement && (
         <div className={styles.card}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-            <h3 className={styles.cardTitle} style={{ margin: 0 }}>Desembolso #{disbursement.id}</h3>
-            <span className={`${styles.badge} ${STATUS_COLOR[disbursement.status] || styles.badgeGray}`}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.125rem" }}>
+            <h3 className={styles.cardTitle} style={{ margin: 0 }}>Desembolso activo</h3>
+            <span className={`${styles.badge} ${STATUS_CLS[disbursement.status] || styles.badgeGray}`}>
               {disbursement.status}
             </span>
           </div>
-          <div className={styles.grid2}>
-            <div className={styles.infoRow} style={{ flexDirection: "column", gap: 2 }}>
-              <span className={styles.infoLabel}>Monto</span>
-              <span className={styles.infoValue} style={{ fontSize: "1.5rem", color: "#4ade80" }}>
-                USD {disbursement.amount.toLocaleString()}
-              </span>
-            </div>
-            <div className={styles.infoRow} style={{ flexDirection: "column", gap: 2 }}>
-              <span className={styles.infoLabel}>Canal</span>
-              <span className={styles.infoValue}>{disbursement.channel}</span>
-            </div>
+
+          <div style={{ padding: "1.25rem", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, marginBottom: "1.125rem", textAlign: "center" }}>
+            <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: 4 }}>Monto desembolsado</div>
+            <div style={{ fontSize: "2.25rem", fontWeight: 800, color: "#16a34a" }}>USD {disbursement.amount.toLocaleString()}</div>
+          </div>
+
+          <div className={styles.infoRow}>
+            <span className={styles.infoLabel}>Canal</span>
+            <span className={styles.infoValue}>{disbursement.channel}</span>
           </div>
           <div className={styles.infoRow}>
             <span className={styles.infoLabel}>Cuenta destino</span>
@@ -77,8 +78,8 @@ export default function DisbursementPage() {
           </div>
           {disbursement.providerReference && (
             <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>Referencia proveedor</span>
-              <span className={styles.infoValue} style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{disbursement.providerReference}</span>
+              <span className={styles.infoLabel}>Referencia</span>
+              <code style={{ fontSize: "0.8125rem", color: "#1d4ed8" }}>{disbursement.providerReference}</code>
             </div>
           )}
           {disbursement.completedAt && (
@@ -87,10 +88,14 @@ export default function DisbursementPage() {
               <span className={styles.infoValue}>{new Date(disbursement.completedAt).toLocaleString()}</span>
             </div>
           )}
+
           {disbursement.status === "COMPLETED" && (
-            <div className={styles.success} style={{ marginTop: "0.75rem" }}>
-              ✅ Tu crédito fue desembolsado exitosamente.{" "}
-              <Link to="/applicant/loan-status" style={{ color: "#4ade80", fontWeight: 600 }}>Ver cuotas →</Link>
+            <div className={styles.infoBox} style={{ marginTop: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <CheckCircle size={15} />
+              Crédito desembolsado exitosamente.{" "}
+              <Link to="/applicant/loan-status" style={{ color: "#1d4ed8", fontWeight: 600 }}>
+                Ver cuotas <ArrowRight size={12} style={{ display: "inline" }} />
+              </Link>
             </div>
           )}
         </div>
@@ -98,24 +103,43 @@ export default function DisbursementPage() {
 
       {!disbursement && (
         <form onSubmit={handleRequest}>
+          {error   && <div className={styles.error}>{error}</div>}
+          {success && <div className={styles.success}>{success}</div>}
+
           <div className={styles.card}>
-            <h3 className={styles.cardTitle}>Selecciona canal de desembolso</h3>
-            {error && <div className={styles.error}>{error}</div>}
-            {success && <div className={styles.success}>{success}</div>}
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1rem" }}>
-              {CHANNELS.map((ch) => (
-                <label key={ch.value} style={{ display: "flex", alignItems: "center", gap: "0.75rem", cursor: "pointer", padding: "0.75rem", background: form.channel === ch.value ? "#0f2744" : "#0f172a", border: `1px solid ${form.channel === ch.value ? "#38bdf8" : "#334155"}`, borderRadius: 8 }}>
-                  <input type="radio" name="channel" value={ch.value} checked={form.channel === ch.value} onChange={(e) => setForm({ ...form, channel: e.target.value })} style={{ accentColor: "#38bdf8" }} />
-                  <span style={{ fontSize: "1.25rem" }}>{ch.icon}</span>
-                  <span style={{ color: "#e2e8f0", fontSize: "0.875rem" }}>{ch.label}</span>
+            <h3 className={styles.cardTitle}>Selecciona el canal de desembolso</h3>
+            <div className={dStyles.channelGrid}>
+              {CHANNELS.map(({ value, label, sub, Icon }) => (
+                <label
+                  key={value}
+                  className={`${dStyles.channelCard} ${form.channel === value ? dStyles.channelCardActive : ""}`}
+                >
+                  <input
+                    type="radio" name="channel" value={value}
+                    checked={form.channel === value}
+                    onChange={(e) => setForm({ ...form, channel: e.target.value })}
+                    style={{ display: "none" }}
+                  />
+                  <Icon size={22} color={form.channel === value ? "#1d4ed8" : "#94a3b8"} />
+                  <div>
+                    <div className={dStyles.channelLabel}>{label}</div>
+                    <div className={dStyles.channelSub}>{sub}</div>
+                  </div>
                 </label>
               ))}
             </div>
-            <div className={styles.field}>
+
+            <div className={styles.field} style={{ marginTop: "1rem" }}>
               <label>Número de cuenta / teléfono</label>
-              <input type="text" value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="ej. 70000001" required />
+              <input
+                type="text" value={form.destination}
+                onChange={(e) => setForm({ ...form, destination: e.target.value })}
+                placeholder="Ej. 70000001"
+                required
+              />
             </div>
           </div>
+
           <div className={styles.btnRow}>
             <button className={styles.btnPrimary} type="submit" disabled={submitting}>
               {submitting ? "Procesando..." : "Solicitar desembolso"}
