@@ -1,152 +1,270 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { Smartphone, Building2, Store, Banknote, ArrowRight, CheckCircle } from "lucide-react";
-import { getDisbursement, requestDisbursement } from "../../api/api";
+import { useNavigate } from "react-router-dom";
+import { CheckCircle, Clock, AlertCircle, Wallet, Building2, MapPin, Banknote } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
+import {
+  disbursementByWallet,
+  disbursementByBank,
+  disbursementByCorrespondent,
+  getDisbursementsByLoanId,
+  generateInstallments,
+  getLoanByUserId,
+} from "../../api/apiDisbursement";
 import styles from "../shared.module.css";
-import dStyles from "./DisbursementPage.module.css";
 
 const CHANNELS = [
-  { value: "WALLET",        label: "Billetera digital",          sub: "Tigo Money / Unitel",         Icon: Smartphone },
-  { value: "BANK",          label: "Cuenta bancaria",            sub: "Transferencia directa",        Icon: Building2 },
-  { value: "CORRESPONDENT", label: "Corresponsal bancario",      sub: "BancoSol, FIE, Prodem",       Icon: Store },
-  { value: "CASH",          label: "Efectivo",                   sub: "Retiro en punto autorizado",  Icon: Banknote },
+  { key: "WALLET",       label: "Billetera Digital",    icon: Wallet,    placeholder: "Ej: tigo-money-591-70000000",    description: "Tigo Money, PayPal u otra billetera digital" },
+  { key: "BANK",         label: "Cuenta Bancaria",      icon: Building2, placeholder: "Ej: 4012-0001-0023-4567",        description: "Transferencia directa a tu cuenta bancaria" },
+  { key: "CORRESPONDENT",label: "Corresponsal Bancario",icon: MapPin,    placeholder: "Ej: CORRESPONSAL-LA-PAZ-001 (opcional)", description: "Retiro en efectivo en punto corresponsal" },
+  { key: "CASH",         label: "Efectivo",             icon: Banknote,  placeholder: "",                               description: "Retiro directo en oficina NeoLend" },
 ];
 
-const STATUS_CLS = {
-  COMPLETED:  styles.badgeGreen,
-  PROCESSING: styles.badgeYellow,
-  PENDING:    styles.badgeBlue,
-  FAILED:     styles.badgeRed,
+const STATUS_ICON = {
+  COMPLETED:  { icon: CheckCircle,  color: "#22c55e", label: "Desembolsado" },
+  PROCESSING: { icon: Clock,        color: "#f59e0b", label: "Procesando"   },
+  PENDING:    { icon: Clock,        color: "#94a3b8", label: "Pendiente"    },
+  FAILED:     { icon: AlertCircle,  color: "#ef4444", label: "Fallido"      },
 };
 
 export default function DisbursementPage() {
-  const [disbursement, setDisbursement] = useState(null);
-  const [loading, setLoading]           = useState(true);
-  const [form, setForm]                 = useState({ channel: "WALLET", destination: "" });
-  const [submitting, setSubmitting]     = useState(false);
-  const [success, setSuccess]           = useState("");
-  const [error, setError]               = useState("");
+  const { user }  = useAuth();
+  const navigate  = useNavigate();
 
+  const [loan,             setLoan]             = useState(null);
+  const [disbursement,     setDisbursement]     = useState(null);
+  const [selectedChannel,  setSelectedChannel]  = useState("WALLET");
+  const [destination,      setDestination]      = useState("");
+  const [loading,          setLoading]          = useState(true);
+  const [submitting,       setSubmitting]       = useState(false);
+  const [error,            setError]            = useState("");
+  const [success,          setSuccess]          = useState("");
+
+  // ── Cargar préstamo activo del usuario ──────────────────────
   useEffect(() => {
-    getDisbursement("loan1").then(setDisbursement).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+    const load = async () => {
+      try {
+        // 1. Buscar loan activo por user_id directo en tu backend
+        const loanData = await getLoanByUserId(user.id);
+        setLoan({
+          id:             loanData.loan_id,
+          approvedAmount: parseFloat(loanData.approved_amount),
+          interestRate:   parseFloat(loanData.interest_rate),
+          termMonths:     loanData.term_months,
+          applicantId:    loanData.applicant_id || user.id,
+        });
 
-  async function handleRequest(e) {
-    e.preventDefault();
-    setSubmitting(true); setError("");
+        // 2. Ver si ya existe desembolso para ese loan
+        try {
+          const existing = await getDisbursementsByLoanId(loanData.loan_id);
+          if (existing && existing.length > 0) {
+            setDisbursement(existing[0]);
+          }
+        } catch {
+          // Sin desembolso previo, es normal
+        }
+      } catch (err) {
+        setError("No se encontró un préstamo aprobado para tu cuenta. " + err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [user.id]);
+
+  // ── Procesar desembolso ─────────────────────────────────────
+  const handleSubmit = async () => {
+    if (!loan) return;
+    setError("");
+    setSuccess("");
+    setSubmitting(true);
+
+    const payload = {
+      loan_id:             loan.id,
+      applicant_id:        loan.applicantId,
+      amount:              loan.approvedAmount,
+      destination_account: destination || undefined,
+    };
+
     try {
-      const res = await requestDisbursement("loan1", form.channel, form.destination);
-      setDisbursement(res);
-      setSuccess("Solicitud de desembolso enviada. Se procesará en los próximos minutos.");
+      let result;
+      if (selectedChannel === "WALLET")        result = await disbursementByWallet(payload);
+      else if (selectedChannel === "BANK")     result = await disbursementByBank(payload);
+      else if (selectedChannel === "CORRESPONDENT") result = await disbursementByCorrespondent(payload);
+      else                                     result = await disbursementByWallet({ ...payload, destination_account: "CASH-OFFICE" });
+
+      setDisbursement(result);
+
+      // Generar cuotas automáticamente
+      try {
+        await generateInstallments({
+          loan_id:     loan.id,
+          principal:   loan.approvedAmount,
+          annual_rate: loan.interestRate || 18,
+          term_months: loan.termMonths,
+        });
+        setSuccess("¡Desembolso completado! Tus cuotas fueron generadas. Redirigiendo...");
+      } catch {
+        setSuccess("¡Desembolso completado! Redirigiendo al estado de tu préstamo...");
+      }
+
+      setTimeout(() => navigate("/applicant/loan-status"), 2500);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Error al procesar el desembolso. Intenta nuevamente.");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // ── Loading ─────────────────────────────────────────────────
+  if (loading) return <div className={styles.loading}>Cargando información del préstamo...</div>;
+
+  // ── Ya fue desembolsado ─────────────────────────────────────
+  if (disbursement && disbursement.status === "COMPLETED") {
+    return (
+      <div className={styles.page}>
+        <div className={styles.pageHeader}>
+          <h1 className={styles.pageTitle}>Desembolso</h1>
+          <p className={styles.pageSubtitle}>Estado de tu crédito aprobado</p>
+        </div>
+
+        <div className={styles.card} style={{ textAlign: "center", padding: "2.5rem" }}>
+          <CheckCircle size={56} color="#22c55e" style={{ marginBottom: "1rem" }} />
+          <h2 style={{ color: "#0f172a", marginBottom: "0.5rem" }}>¡Crédito Desembolsado!</h2>
+          <p style={{ color: "#64748b", marginBottom: "1.5rem" }}>Tu dinero fue enviado exitosamente</p>
+
+          <div className={styles.grid3} style={{ marginBottom: "1.5rem", textAlign: "left" }}>
+            {[
+              ["Monto",      `USD ${parseFloat(disbursement.amount || loan?.approvedAmount).toLocaleString()}`],
+              ["Canal",      disbursement.channel],
+              ["Referencia", disbursement.provider_reference || "—"],
+              ["Estado",     STATUS_ICON[disbursement.status]?.label || disbursement.status],
+              ["Completado", disbursement.completed_at ? new Date(disbursement.completed_at).toLocaleString() : "—"],
+              ["Destino",    disbursement.destination_account || "—"],
+            ].map(([k, v]) => (
+              <div key={k}>
+                <div style={{ fontSize: "0.7rem", color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", marginBottom: 2 }}>{k}</div>
+                <div style={{ fontWeight: 600, color: "#0f172a", fontSize: "0.9rem" }}>{v}</div>
+              </div>
+            ))}
+          </div>
+
+          <button className={styles.btnPrimary} onClick={() => navigate("/applicant/loan-status")}>
+            Ver mis cuotas →
+          </button>
+        </div>
+      </div>
+    );
   }
 
-  if (loading) return <div className={styles.loading}>Consultando desembolso...</div>;
+  // ── Formulario ──────────────────────────────────────────────
+  const channel = CHANNELS.find((c) => c.key === selectedChannel);
 
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
         <h1 className={styles.pageTitle}>Desembolso</h1>
-        <p className={styles.pageSubtitle}>Recibe tu crédito aprobado a través del canal de tu preferencia</p>
+        <p className={styles.pageSubtitle}>Elige cómo recibir tu crédito aprobado</p>
       </div>
 
-      {disbursement && (
-        <div className={styles.card}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.125rem" }}>
-            <h3 className={styles.cardTitle} style={{ margin: 0 }}>Desembolso activo</h3>
-            <span className={`${styles.badge} ${STATUS_CLS[disbursement.status] || styles.badgeGray}`}>
-              {disbursement.status}
-            </span>
-          </div>
+      {/* Error general (sin préstamo) */}
+      {error && !loan && (
+        <div className={styles.error}>{error}</div>
+      )}
 
-          <div style={{ padding: "1.25rem", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, marginBottom: "1.125rem", textAlign: "center" }}>
-            <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: 4 }}>Monto desembolsado</div>
-            <div style={{ fontSize: "2.25rem", fontWeight: 800, color: "#16a34a" }}>USD {disbursement.amount.toLocaleString()}</div>
+      {/* Resumen del préstamo */}
+      {loan && (
+        <div className={styles.card} style={{ marginBottom: "1.25rem" }}>
+          <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "0.75rem" }}>
+            Resumen del crédito aprobado
           </div>
-
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Canal</span>
-            <span className={styles.infoValue}>{disbursement.channel}</span>
+          <div className={styles.grid3}>
+            {[
+              ["Monto aprobado", `USD ${loan.approvedAmount?.toLocaleString()}`],
+              ["Plazo",          `${loan.termMonths} meses`],
+              ["Tasa anual",     `${loan.interestRate}%`],
+            ].map(([k, v]) => (
+              <div key={k}>
+                <div style={{ fontSize: "0.7rem", color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", marginBottom: 2 }}>{k}</div>
+                <div style={{ fontWeight: 700, color: "#0f172a" }}>{v}</div>
+              </div>
+            ))}
           </div>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Cuenta destino</span>
-            <span className={styles.infoValue}>{disbursement.destinationAccount}</span>
-          </div>
-          {disbursement.providerReference && (
-            <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>Referencia</span>
-              <code style={{ fontSize: "0.8125rem", color: "#1d4ed8" }}>{disbursement.providerReference}</code>
-            </div>
-          )}
-          {disbursement.completedAt && (
-            <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>Completado</span>
-              <span className={styles.infoValue}>{new Date(disbursement.completedAt).toLocaleString()}</span>
-            </div>
-          )}
-
-          {disbursement.status === "COMPLETED" && (
-            <div className={styles.infoBox} style={{ marginTop: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <CheckCircle size={15} />
-              Crédito desembolsado exitosamente.{" "}
-              <Link to="/applicant/loan-status" style={{ color: "#1d4ed8", fontWeight: 600 }}>
-                Ver cuotas <ArrowRight size={12} style={{ display: "inline" }} />
-              </Link>
-            </div>
-          )}
         </div>
       )}
 
-      {!disbursement && (
-        <form onSubmit={handleRequest}>
-          {error   && <div className={styles.error}>{error}</div>}
-          {success && <div className={styles.success}>{success}</div>}
+      {/* Selección de canal */}
+      {loan && (
+        <div className={styles.card} style={{ marginBottom: "1.25rem" }}>
+          <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "1rem" }}>
+            ¿Cómo quieres recibir tu dinero?
+          </div>
 
-          <div className={styles.card}>
-            <h3 className={styles.cardTitle}>Selecciona el canal de desembolso</h3>
-            <div className={dStyles.channelGrid}>
-              {CHANNELS.map(({ value, label, sub, Icon }) => (
-                <label
-                  key={value}
-                  className={`${dStyles.channelCard} ${form.channel === value ? dStyles.channelCardActive : ""}`}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1rem" }}>
+            {CHANNELS.map(({ key, label, icon: Icon, description }) => {
+              const active = selectedChannel === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => { setSelectedChannel(key); setDestination(""); }}
+                  style={{
+                    border:       `2px solid ${active ? "#6366f1" : "#e2e8f0"}`,
+                    borderRadius: "0.75rem",
+                    padding:      "1rem",
+                    background:   active ? "#f0f0ff" : "#fff",
+                    cursor:       "pointer",
+                    textAlign:    "left",
+                    transition:   "all 0.15s",
+                  }}
                 >
-                  <input
-                    type="radio" name="channel" value={value}
-                    checked={form.channel === value}
-                    onChange={(e) => setForm({ ...form, channel: e.target.value })}
-                    style={{ display: "none" }}
-                  />
-                  <Icon size={22} color={form.channel === value ? "#1d4ed8" : "#94a3b8"} />
-                  <div>
-                    <div className={dStyles.channelLabel}>{label}</div>
-                    <div className={dStyles.channelSub}>{sub}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
+                  <Icon size={20} color={active ? "#6366f1" : "#94a3b8"} style={{ marginBottom: "0.4rem" }} />
+                  <div style={{ fontWeight: 600, color: active ? "#6366f1" : "#0f172a", fontSize: "0.85rem" }}>{label}</div>
+                  <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.2rem" }}>{description}</div>
+                </button>
+              );
+            })}
+          </div>
 
-            <div className={styles.field} style={{ marginTop: "1rem" }}>
-              <label>Número de cuenta / teléfono</label>
+          {/* Campo destino (no para CASH) */}
+          {selectedChannel !== "CASH" && (
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "0.4rem" }}>
+                {selectedChannel === "WALLET" ? "Número o alias de billetera" :
+                 selectedChannel === "BANK"   ? "Número de cuenta bancaria"   :
+                                                "Código de corresponsal (opcional)"}
+              </label>
               <input
-                type="text" value={form.destination}
-                onChange={(e) => setForm({ ...form, destination: e.target.value })}
-                placeholder="Ej. 70000001"
-                required
+                type="text"
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+                placeholder={channel?.placeholder}
+                style={{
+                  width: "100%", padding: "0.625rem 0.875rem",
+                  border: "1.5px solid #e2e8f0", borderRadius: "0.5rem",
+                  fontSize: "0.875rem", outline: "none", boxSizing: "border-box",
+                }}
               />
             </div>
-          </div>
+          )}
 
-          <div className={styles.btnRow}>
-            <button className={styles.btnPrimary} type="submit" disabled={submitting}>
-              {submitting ? "Procesando..." : "Solicitar desembolso"}
-            </button>
-          </div>
-        </form>
+          {error   && <div className={styles.error}   style={{ marginBottom: "0.75rem" }}>{error}</div>}
+          {success && <div className={styles.success} style={{ marginBottom: "0.75rem" }}>{success}</div>}
+
+          <button
+            className={styles.btnPrimary}
+            onClick={handleSubmit}
+            disabled={submitting || (selectedChannel !== "CASH" && !destination.trim())}
+            style={{ width: "100%", opacity: submitting ? 0.7 : 1 }}
+          >
+            {submitting
+              ? "Procesando desembolso..."
+              : `Recibir USD ${loan?.approvedAmount?.toLocaleString() || "—"} por ${channel?.label}`}
+          </button>
+        </div>
       )}
+
+      <p style={{ fontSize: "0.75rem", color: "#94a3b8", textAlign: "center" }}>
+        Al confirmar, recibirás una notificación por WhatsApp y Email con la referencia del desembolso.
+      </p>
     </div>
   );
 }
