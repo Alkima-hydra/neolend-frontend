@@ -1,7 +1,7 @@
 const BASE_AUTH = 'http://localhost:3003/api/auth';
 const BASE_APPLICANT = 'http://localhost:3003/api/applicants';
 
-const getToken = () => localStorage.getItem('token');
+const getToken = () => localStorage.getItem('neolend_token');
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -110,6 +110,68 @@ export async function subirDocumento(id, documentoData) {
 
 export async function getProfileStatus(id) {
   const res = await fetch(`${BASE_APPLICANT}/${id}/profile-status`, {
+    headers: { 'x-token': getToken() }
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.msg);
+  return data;
+}
+
+export async function getApplicantByUserId(userId) {
+  const res = await fetch(`${BASE_APPLICANT}/user/${userId}`, {
+    headers: { 'x-token': getToken() }
+  });
+  const data = await res.json();
+  if (!data.ok) return null;
+  return data.applicant;
+}
+
+export async function getAllUsers() {
+  const res = await fetch(`${BASE_AUTH}/users`, {
+    headers: { 'x-token': getToken() }
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.msg);
+  return data.usuarios;
+}
+
+export async function createUser(userData) {
+  const res = await fetch(`${BASE_AUTH}/users`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-token': getToken()
+    },
+    body: JSON.stringify({
+      full_name: userData.fullName,
+      email: userData.email,
+      password: userData.password,
+      role_name: userData.role,
+      phone: userData.phone
+    })
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.msg);
+  return data.usuario;
+}
+
+export async function updateUserStatus(userId, status) {
+  const res = await fetch(`${BASE_AUTH}/users/${userId}/status`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-token': getToken()
+    },
+    body: JSON.stringify({ status })
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.msg);
+  return data;
+}
+
+export async function deleteUser(userId) {
+  const res = await fetch(`${BASE_AUTH}/users/${userId}`, {
+    method: 'DELETE',
     headers: { 'x-token': getToken() }
   });
   const data = await res.json();

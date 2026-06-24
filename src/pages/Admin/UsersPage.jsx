@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { UserPlus, Search, Pencil, Trash2, ShieldCheck, ShieldOff } from "lucide-react";
-import { getAllUsers, createUser, updateUserStatus, deleteUser } from "../../api/api";
+import { UserPlus, Search, Trash2, ShieldCheck, ShieldOff } from "lucide-react";
+import { getAllUsers, createUser, updateUserStatus, deleteUser } from "../../api/authApi";
 import styles from "./UsersPage.module.css";
 import shared from "../shared.module.css";
 
@@ -16,17 +16,17 @@ const ROLE_BADGE_CLASS = {
   ADMIN:           shared.badgeRed,
 };
 
-const EMPTY_FORM = { fullName: "", email: "", password: "neolend123", role: "SOLICITANTE", phone: "" };
+const EMPTY_FORM = { fullName: "", email: "", password: "Neolend@12345!", role: "SOLICITANTE", phone: "" };
 
 export default function UsersPage() {
-  const [users, setUsers]         = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [search, setSearch]       = useState("");
-  const [showModal, setShowModal] = useState(false);
-  const [form, setForm]           = useState(EMPTY_FORM);
+  const [users, setUsers]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState("");
+  const [showModal, setShowModal]   = useState(false);
+  const [form, setForm]             = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError]         = useState("");
-  const [success, setSuccess]     = useState("");
+  const [error, setError]           = useState("");
+  const [success, setSuccess]       = useState("");
 
   useEffect(() => {
     getAllUsers().then(setUsers).finally(() => setLoading(false));
@@ -35,9 +35,9 @@ export default function UsersPage() {
   const filtered = useMemo(
     () => users.filter(
       (u) =>
-        u.fullName.toLowerCase().includes(search.toLowerCase()) ||
-        u.email.toLowerCase().includes(search.toLowerCase()) ||
-        u.role.toLowerCase().includes(search.toLowerCase())
+        u.fullName?.toLowerCase().includes(search.toLowerCase()) ||
+        u.email?.toLowerCase().includes(search.toLowerCase()) ||
+        u.role?.toLowerCase().includes(search.toLowerCase())
     ),
     [users, search]
   );
@@ -63,16 +63,24 @@ export default function UsersPage() {
 
   async function handleToggleStatus(user) {
     const next = user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    await updateUserStatus(user.id, next);
-    setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, status: next } : u));
-    setSuccess(`Usuario ${next === "ACTIVE" ? "activado" : "desactivado"} correctamente.`);
+    try {
+      await updateUserStatus(user.id, next);
+      setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, status: next } : u));
+      setSuccess(`Usuario ${next === "ACTIVE" ? "activado" : "desactivado"} correctamente.`);
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   async function handleDelete(user) {
     if (!window.confirm(`Eliminar a "${user.fullName}"? Esta acción no se puede deshacer.`)) return;
-    await deleteUser(user.id);
-    setUsers((prev) => prev.filter((u) => u.id !== user.id));
-    setSuccess(`Usuario "${user.fullName}" eliminado.`);
+    try {
+      await deleteUser(user.id);
+      setUsers((prev) => prev.filter((u) => u.id !== user.id));
+      setSuccess(`Usuario "${user.fullName}" eliminado.`);
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   if (loading) return <div className={shared.loading}>Cargando usuarios...</div>;
@@ -85,13 +93,14 @@ export default function UsersPage() {
       </div>
 
       {success && <div className={shared.success}>{success}</div>}
+      {error   && <div className={shared.error}>{error}</div>}
 
       <div className={shared.statGrid}>
         {[
           { label: "Total usuarios",   value: users.length },
           { label: "Activos",          value: users.filter((u) => u.status === "ACTIVE").length },
           { label: "Solicitantes",     value: users.filter((u) => u.role === "SOLICITANTE").length },
-          { label: "Staff interno",    value: users.filter((u) => ["ANALISTA","GESTOR_COBRANZA","ADMIN"].includes(u.role)).length },
+          { label: "Staff interno",    value: users.filter((u) => ["ANALISTA", "GESTOR_COBRANZA"].includes(u.role)).length },
         ].map((s) => (
           <div className={shared.statCard} key={s.label}>
             <div className={shared.statValue}>{s.value}</div>
@@ -112,7 +121,7 @@ export default function UsersPage() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <button className={shared.btnPrimary} onClick={() => { setShowModal(true); setError(""); }}>
+          <button className={shared.btnPrimary} onClick={() => { setShowModal(true); setError(""); setSuccess(""); }}>
             <UserPlus size={15} />
             Nuevo usuario
           </button>
@@ -137,7 +146,7 @@ export default function UsersPage() {
                   <td style={{ color: "#64748b", fontSize: "0.8125rem" }}>{user.email}</td>
                   <td>
                     <span className={`${shared.badge} ${ROLE_BADGE_CLASS[user.role] || shared.badgeGray}`}>
-                      {user.role.replace("_", " ")}
+                      {user.role?.replace(/_/g, " ")}
                     </span>
                   </td>
                   <td>
@@ -151,7 +160,7 @@ export default function UsersPage() {
                   <td>
                     <div className={styles.actionCell}>
                       <button
-                        className={`${styles.iconBtn}`}
+                        className={styles.iconBtn}
                         title={user.status === "ACTIVE" ? "Desactivar" : "Activar"}
                         onClick={() => handleToggleStatus(user)}
                       >
@@ -210,7 +219,7 @@ export default function UsersPage() {
                   <label>Rol en el sistema</label>
                   <select name="role" value={form.role} onChange={change}>
                     {ROLES.map((r) => (
-                      <option key={r} value={r}>{r.replace("_", " ")}</option>
+                      <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
                     ))}
                   </select>
                 </div>
