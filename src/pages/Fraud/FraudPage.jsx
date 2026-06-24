@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Shield, ShieldAlert, X } from "lucide-react";
-import { getAllFraudChecks } from "../../api/api";
+import { getAllFraudChecks } from "../../api/AuditApi";
 import styles from "../shared.module.css";
 
 const RISK_CLS = { LOW: styles.badgeGreen, MEDIUM: styles.badgeYellow, HIGH: styles.badgeRed };

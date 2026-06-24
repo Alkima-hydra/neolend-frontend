@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { BookOpen, Award, ChevronRight, CheckCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { getApplicantByUserId, getCourses, getCourseProgress, completeLesson } from "../../api/api";
+import { getApplicantByUserId, getCourses, getCourseProgress, completeLesson } from "../../api/AuditApi";
 import styles from "../shared.module.css";
 
 export default function EducationPage() {
