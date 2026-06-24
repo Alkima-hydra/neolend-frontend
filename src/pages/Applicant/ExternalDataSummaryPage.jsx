@@ -1,16 +1,42 @@
-import { useState, useEffect } from "react";
-import { useAuth } from "../../context/AuthContext";
-import { getApplicantByUserId, getApplicationsByApplicant, getExternalDataSummary } from "../../api/api";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams, Link } from "react-router-dom";
+import { ArrowLeft, RefreshCw } from "lucide-react";
+import { getExternalSummary } from "../../api/api";
 import styles from "../shared.module.css";
 
-function ScoreBar({ label, value, max = 100 }) {
+const SCORE_FIELDS = [
+  { key: "credit_bureau_score",      label: "Buró Crediticio",     max: 999  },
+  { key: "utility_payment_score",    label: "Servicios Públicos",   max: 1000 },
+  { key: "wallet_transaction_score", label: "Billeteras Digitales", max: 1000 },
+  { key: "ecommerce_score",          label: "E-commerce",           max: 1000 },
+  { key: "mobile_topup_score",       label: "Recargas Móviles",     max: 1000 },
+];
+
+function scoreColor(pct) {
+  return pct >= 70 ? "#16a34a" : pct >= 50 ? "#d97706" : "#dc2626";
+}
+
+function ScoreBar({ label, value, max }) {
+  if (value == null) {
+    return (
+      <div style={{ marginBottom: "0.875rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+          <span style={{ fontSize: "0.8125rem", color: "#475569" }}>{label}</span>
+          <span style={{ fontSize: "0.8125rem", color: "#94a3b8", fontStyle: "italic" }}>Pendiente...</span>
+        </div>
+        <div className={styles.progressBar}>
+          <div className={styles.progressFill} style={{ width: "0%" }} />
+        </div>
+      </div>
+    );
+  }
   const pct   = Math.min((value / max) * 100, 100);
-  const color = value >= 80 ? "#16a34a" : value >= 60 ? "#d97706" : "#dc2626";
+  const color = scoreColor(pct);
   return (
     <div style={{ marginBottom: "0.875rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
         <span style={{ fontSize: "0.8125rem", color: "#475569" }}>{label}</span>
-        <span style={{ fontSize: "0.8125rem", fontWeight: 700, color }}>{value}</span>
+        <span style={{ fontSize: "0.8125rem", fontWeight: 700, color }}>{value.toLocaleString()}</span>
       </div>
       <div className={styles.progressBar}>
         <div className={styles.progressFill} style={{ width: `${pct}%`, background: color }} />
@@ -19,108 +45,127 @@ function ScoreBar({ label, value, max = 100 }) {
   );
 }
 
+function CompositeEstimate({ score }) {
+  if (score == null) return null;
+  let label, cls;
+  if (score >= 700)      { label = "Probable aprobación automática"; cls = styles.badgeGreen; }
+  else if (score >= 600) { label = "Probable revisión manual";       cls = styles.badgeYellow; }
+  else                   { label = "Probable rechazo";               cls = styles.badgeRed; }
+  return <span className={`${styles.badge} ${cls}`}>{label}</span>;
+}
+
 export default function ExternalDataSummaryPage() {
-  const { user } = useAuth();
-  const [data, setData]     = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState("");
+  const [searchParams] = useSearchParams();
+  const id             = searchParams.get("id");
+  const [data, setData]       = useState(null);
+  const [loading, setLoading] = useState(!!id);
+  const [error, setError]     = useState("");
+  const intervalRef    = useRef(null);
+
+  function stopPolling() {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }
 
   useEffect(() => {
-    getApplicantByUserId(user.id)
-      .then((a) => getApplicationsByApplicant(a.id))
-      .then((apps) => {
-        const app = apps.find((a) => ["APPROVED","MANUAL_REVIEW","REJECTED"].includes(a.status)) || apps[0];
-        if (!app) throw new Error("Sin solicitudes para mostrar datos externos");
-        return getExternalDataSummary(app.id);
-      })
-      .then(setData)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [user.id]);
+    if (!id) { setLoading(false); return; }
+
+    async function fetchSummary() {
+      try {
+        const result = await getExternalSummary(id);
+        setData(result);
+        setLoading(false);
+        if (result.all_sources_ready) stopPolling();
+      } catch (err) {
+        setError(err.message);
+        setLoading(false);
+        stopPolling();
+      }
+    }
+
+    fetchSummary();
+    intervalRef.current = setInterval(fetchSummary, 5000);
+    return () => stopPolling();
+  }, [id]);
+
+  if (!id) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.pageHeader}>
+          <h1 className={styles.pageTitle}>Resumen de Datos Externos</h1>
+        </div>
+        <div className={styles.card} style={{ textAlign: "center", padding: "2.5rem", color: "#94a3b8" }}>
+          No se especificó una solicitud.{" "}
+          <Link to="/applicant/apply" style={{ color: "#1d4ed8" }}>Crear solicitud</Link>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) return <div className={styles.loading}>Consultando fuentes externas...</div>;
   if (error)   return <div className={styles.error}>{error}</div>;
+  if (!data)   return null;
+
+  const composite     = data.composite_score;
+  const compositePct  = composite != null ? Math.min((composite / 1000) * 100, 100) : 0;
+  const compositeColor = composite != null ? scoreColor(compositePct) : "#94a3b8";
 
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>Resumen de Datos Externos</h1>
-        <p className={styles.pageSubtitle}>Fuentes de datos alternativos consultadas durante tu evaluación crediticia</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <h1 className={styles.pageTitle}>Resumen de Datos Externos</h1>
+            <p className={styles.pageSubtitle}>Fuentes de datos alternativos consultadas durante tu evaluación crediticia</p>
+          </div>
+          <Link to={`/applicant/application-status?id=${id}`}>
+            <button className={styles.btnSecondary}><ArrowLeft size={13} /> Volver</button>
+          </Link>
+        </div>
       </div>
 
+      {!data.all_sources_ready && (
+        <div className={styles.infoBox} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <RefreshCw size={13} /> Consultando fuentes... actualizando cada 5 segundos.
+        </div>
+      )}
+
+      {/* Score compuesto */}
+      <div className={styles.card}>
+        <h3 className={styles.cardTitle}>Score Compuesto</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+          <span style={{ fontSize: "2.25rem", fontWeight: 700, color: compositeColor, lineHeight: 1 }}>
+            {composite != null ? composite.toLocaleString() : "—"}
+          </span>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginBottom: 4 }}>de 1,000 puntos</div>
+            <CompositeEstimate score={composite} />
+          </div>
+        </div>
+        <div className={styles.progressBar} style={{ height: 10 }}>
+          <div className={styles.progressFill} style={{ width: `${compositePct}%`, background: compositeColor }} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#94a3b8", marginTop: "0.375rem" }}>
+          <span>0</span>
+          <span>600 (mínimo)</span>
+          <span>700 (aprobado)</span>
+          <span>1,000</span>
+        </div>
+      </div>
+
+      {/* Scores por fuente */}
       <div className={styles.card}>
         <h3 className={styles.cardTitle}>Puntajes por fuente</h3>
-        <ScoreBar label="Buró de crédito"      value={data.creditBureauScore}    max={850} />
-        <ScoreBar label="Pagos de servicios"   value={data.utilityPaymentScore} />
-        <ScoreBar label="Billetera digital"    value={data.walletTransactionScore} />
-        <ScoreBar label="E-commerce"           value={data.ecommerceScore} />
-        <ScoreBar label="Recargas móviles"     value={data.mobileTopupScore} />
+        {SCORE_FIELDS.map(({ key, label, max }) => (
+          <ScoreBar key={key} label={label} value={data[key]} max={max} />
+        ))}
       </div>
 
-      <div className={styles.grid2}>
-        <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Buró de crédito</h3>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Fuente</span>
-            <span className={styles.infoValue}>{data.bureau.source}</span>
-          </div>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Latencia</span>
-            <span className={styles.infoValue}>{data.bureau.latencyMs} ms</span>
-          </div>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Caché</span>
-            <span className={`${styles.badge} ${data.bureau.cacheHit ? styles.badgeGreen : styles.badgeGray}`}>
-              {data.bureau.cacheHit ? "HIT" : "MISS"}
-            </span>
-          </div>
-          {data.bureau.circuitBreaker && (
-            <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>Circuit Breaker</span>
-              <span className={`${styles.badge} ${styles.badgeYellow}`}>{data.bureau.circuitBreaker}</span>
-            </div>
-          )}
-        </div>
-
-        <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Servicios públicos</h3>
-          {Object.entries(data.utilities).map(([k, v]) => (
-            <div className={styles.infoRow} key={k}>
-              <span className={styles.infoLabel} style={{ textTransform: "capitalize" }}>{k}</span>
-              <span className={`${styles.badge} ${v === "ON_TIME" ? styles.badgeGreen : styles.badgeYellow}`}>{v}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Billetera digital</h3>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Transacciones / mes</span>
-            <span className={styles.infoValue}>{data.wallet.monthlyTransactions}</span>
-          </div>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Saldo promedio</span>
-            <span className={styles.infoValue}>USD {data.wallet.avgBalance}</span>
-          </div>
-        </div>
-
-        <div className={styles.card}>
-          <h3 className={styles.cardTitle}>E-commerce</h3>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Órdenes (6 meses)</span>
-            <span className={styles.infoValue}>{data.ecommerce.ordersLast6Months}</span>
-          </div>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Contracargos</span>
-            <span className={`${styles.badge} ${data.ecommerce.chargebacks === 0 ? styles.badgeGreen : styles.badgeRed}`}>
-              {data.ecommerce.chargebacks}
-            </span>
-          </div>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Recargas</span>
-            <span className={styles.infoValue}>{data.mobileTopups.frequency} — {data.mobileTopups.consistency}</span>
-          </div>
-        </div>
+      <div style={{ fontSize: "0.75rem", color: "#94a3b8", textAlign: "center", marginTop: "0.25rem" }}>
+        Solicitud {data.application_id}
+        {data.all_sources_ready ? " · Todas las fuentes consultadas" : " · Algunas fuentes aún están siendo consultadas"}
       </div>
     </div>
   );

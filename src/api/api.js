@@ -5,7 +5,7 @@ const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms));
 // ─── Seed data ────────────────────────────────────────────────────────────────
 
 let USERS = [
-  { id: "u1",    email: "juan.solicitante@neolend.com",     password: "demo123", role: "SOLICITANTE",     fullName: "Juan Pérez Solicitante",   status: "ACTIVE",   createdAt: "2026-01-10T08:00:00Z" },
+  { id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",    email: "juan.solicitante@neolend.com",     password: "demo123", role: "SOLICITANTE",     fullName: "Juan Pérez Solicitante",   status: "ACTIVE",   createdAt: "2026-01-10T08:00:00Z" },
   { id: "u2",    email: "maria.analista@neolend.com",       password: "demo123", role: "ANALISTA",        fullName: "María López Analista",      status: "ACTIVE",   createdAt: "2026-01-10T08:00:00Z" },
   { id: "u3",    email: "carlos.cobranza@neolend.com",      password: "demo123", role: "GESTOR_COBRANZA", fullName: "Carlos Rojas Cobranza",     status: "ACTIVE",   createdAt: "2026-01-10T08:00:00Z" },
   { id: "u4",    email: "fondo.andino@neolend.com",         password: "demo123", role: "INVERSIONISTA",   fullName: "Fondo Andino Capital",      status: "ACTIVE",   createdAt: "2026-01-10T08:00:00Z" },
@@ -17,7 +17,7 @@ let USERS = [
 ];
 
 const APPLICANTS = {
-  u1: { id: "a1", userId: "u1", documentType: "CI", documentNumber: "LP-1234567", birthDate: "1998-05-14", address: "Av. Arce #123", city: "La Paz", country: "Bolivia", employmentStatus: "DEPENDENT", monthlyIncome: 3200, profileStatus: "COMPLETE" },
+  "a1b2c3d4-e5f6-7890-abcd-ef1234567890": { id: "a1", userId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", documentType: "CI", documentNumber: "LP-1234567", birthDate: "1998-05-14", address: "Av. Arce #123", city: "La Paz", country: "Bolivia", employmentStatus: "DEPENDENT", monthlyIncome: 3200, profileStatus: "COMPLETE" },
   u7: { id: "a2", userId: "u7", documentType: "CI", documentNumber: "CB-7654321", birthDate: "1995-09-20", address: "Calle Bolívar #456", city: "Cochabamba", country: "Bolivia", employmentStatus: "INDEPENDENT", monthlyIncome: 4800, profileStatus: "COMPLETE" },
   u8: { id: "a3", userId: "u8", documentType: "CI", documentNumber: "SC-9988776", birthDate: "2000-11-02", address: "Av. Cristo Redentor #789", city: "Santa Cruz", country: "Bolivia", employmentStatus: "INFORMAL", monthlyIncome: 2100, profileStatus: "COMPLETE" },
 };
@@ -83,8 +83,8 @@ const COURSE_PROGRESS = {
 };
 
 const NOTIFICATIONS = [
-  { id: "n1", userId: "u1", channel: "EMAIL",    recipient: "juan.solicitante@neolend.com", subject: "Crédito aprobado",       message: "Tu crédito fue aprobado y desembolsado correctamente.", status: "SENT",    sentAt: "2026-06-10T12:06:00Z" },
-  { id: "n2", userId: "u1", channel: "WHATSAPP", recipient: "+59170000001",                  subject: "Recordatorio de pago",   message: "Recuerda que tu primera cuota vence próximamente.",       status: "PENDING", sentAt: null },
+  { id: "n1", userId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", channel: "EMAIL",    recipient: "juan.solicitante@neolend.com", subject: "Crédito aprobado",       message: "Tu crédito fue aprobado y desembolsado correctamente.", status: "SENT",    sentAt: "2026-06-10T12:06:00Z" },
+  { id: "n2", userId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", channel: "WHATSAPP", recipient: "+59170000001",                  subject: "Recordatorio de pago",   message: "Recuerda que tu primera cuota vence próximamente.",       status: "PENDING", sentAt: null },
 ];
 
 const AUDIT_EVENTS = [
@@ -372,4 +372,42 @@ export async function deleteUser(userId) {
   if (idx === -1) throw new Error("Usuario no encontrado");
   USERS.splice(idx, 1);
   return { deleted: true };
+}
+
+// ─── Real HTTP API ────────────────────────────────────────────────────────────
+
+const CREDIT_API_BASE = "http://localhost:3002/api";
+const EXT_DATA_API_BASE = "http://localhost:3007/api";
+
+async function _http(url, options = {}) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || body.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function createCreditApplication(data) {
+  return _http(`${CREDIT_API_BASE}/credit-applications`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getCreditApplicationById(id) {
+  return _http(`${CREDIT_API_BASE}/credit-applications/${id}`);
+}
+
+export async function patchCreditApplicationStatus(id, status) {
+  return _http(`${CREDIT_API_BASE}/credit-applications/${id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function getExternalSummary(applicationId) {
+  return _http(`${EXT_DATA_API_BASE}/external-data/summary/${applicationId}`);
 }

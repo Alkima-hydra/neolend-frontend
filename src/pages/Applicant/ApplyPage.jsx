@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Send, Calculator } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { getApplicantByUserId, createApplication } from "../../api/api";
+import { createCreditApplication, patchCreditApplicationStatus } from "../../api/api";
 import styles from "../shared.module.css";
 
 const PURPOSES = [
+  "Capital de trabajo",
   "Compra de inventario para pequeño negocio",
   "Capital de trabajo para emprendimiento",
   "Compra de equipos o herramientas",
@@ -18,15 +19,14 @@ const PURPOSES = [
 export default function ApplyPage() {
   const { user }   = useAuth();
   const navigate   = useNavigate();
-  const [applicant, setApplicant]   = useState(null);
-  const [loading, setLoading]       = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState("");
-  const [form, setForm]             = useState({ requestedAmount: "", termMonths: "6", purpose: PURPOSES[0], currency: "USD" });
-
-  useEffect(() => {
-    getApplicantByUserId(user.id).then(setApplicant).catch(() => setError("No se encontró perfil")).finally(() => setLoading(false));
-  }, [user.id]);
+  const [form, setForm]             = useState({
+    requestedAmount: "",
+    termMonths: "6",
+    purpose: PURPOSES[0],
+    currency: "USD",
+  });
 
   function change(e) { setForm({ ...form, [e.target.name]: e.target.value }); }
 
@@ -34,16 +34,27 @@ export default function ApplyPage() {
     e.preventDefault();
     setError("");
     const amount = parseFloat(form.requestedAmount);
-    if (amount < 50 || amount > 5000) { setError("El monto debe estar entre USD 50 y USD 5,000"); return; }
+    if (!amount || amount < 1 || amount > 1_000_000) {
+      setError("El monto debe estar entre USD 1 y USD 1,000,000");
+      return;
+    }
+    const months = parseInt(form.termMonths);
+    if (!months || months < 1 || months > 360) {
+      setError("El plazo debe estar entre 1 y 360 meses");
+      return;
+    }
     setSubmitting(true);
     try {
-      const app = await createApplication(applicant.id, {
-        requestedAmount: amount,
-        termMonths: parseInt(form.termMonths),
-        purpose: form.purpose,
-        currency: form.currency,
+      const app = await createCreditApplication({
+        applicant_id:     user.id,
+        requested_amount: amount,
+        currency:         form.currency,
+        term_months:      months,
+        purpose:          form.purpose || undefined,
       });
-      navigate("/applicant/application-status", { state: { newApp: app } });
+      // fire-and-forget: avanza estado en segundo plano
+      patchCreditApplicationStatus(app.id, "DATA_COLLECTING").catch(() => {});
+      navigate(`/applicant/application-status?id=${app.id}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -51,12 +62,10 @@ export default function ApplyPage() {
     }
   }
 
-  const amount = parseFloat(form.requestedAmount) || 0;
-  const months = parseInt(form.termMonths) || 6;
+  const amount  = parseFloat(form.requestedAmount) || 0;
+  const months  = parseInt(form.termMonths) || 6;
   const monthly = amount > 0 ? ((amount * (1 + 0.125)) / months).toFixed(2) : null;
   const total   = amount > 0 ? (amount * (1 + 0.125)).toFixed(2) : null;
-
-  if (loading) return <div className={styles.loading}>Cargando...</div>;
 
   return (
     <div className={styles.page}>
@@ -73,13 +82,15 @@ export default function ApplyPage() {
           <div className={styles.grid2}>
             <div className={styles.field}>
               <label>Monto solicitado (USD)</label>
-              <input type="number" name="requestedAmount" value={form.requestedAmount} onChange={change}
-                placeholder="Ej. 450" min="50" max="5000" step="10" required />
+              <input
+                type="number" name="requestedAmount" value={form.requestedAmount}
+                onChange={change} placeholder="Ej. 350" min="1" max="1000000" step="1" required
+              />
             </div>
             <div className={styles.field}>
               <label>Plazo en meses</label>
               <select name="termMonths" value={form.termMonths} onChange={change}>
-                {[3, 4, 6, 9, 12, 18, 24].map((m) => (
+                {[3, 4, 6, 9, 12, 18, 24, 36, 48, 60].map((m) => (
                   <option key={m} value={m}>{m} meses</option>
                 ))}
               </select>
@@ -100,7 +111,7 @@ export default function ApplyPage() {
             </h3>
             <div className={styles.grid3}>
               <div className={styles.statCard}>
-                <div className={styles.statValue}>USD {amount.toFixed(2)}</div>
+                <div className={styles.statValue}>USD {amount.toLocaleString()}</div>
                 <div className={styles.statLabel}>Monto solicitado</div>
               </div>
               <div className={styles.statCard}>
@@ -119,7 +130,7 @@ export default function ApplyPage() {
         )}
 
         <div className={styles.btnRow}>
-          <button className={styles.btnPrimary} type="submit" disabled={submitting || !applicant}>
+          <button className={styles.btnPrimary} type="submit" disabled={submitting}>
             <Send size={14} />
             {submitting ? "Enviando solicitud..." : "Enviar solicitud de crédito"}
           </button>
