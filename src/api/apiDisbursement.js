@@ -120,6 +120,12 @@ export const generateInstallments = async ({ loan_id, principal, annual_rate = 1
   if (!data.ok) throw new Error(data.message || "Error al generar cuotas");
   return data.data;
 };
+export const getLoanByUserId = async (userId) => {
+  const res = await fetch(`${BASE_URL}/api/collections/loan-by-user/${userId}`);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.message);
+  return data.data;
+};
 
 // ──────────────────────────────────────────────
 // NOTIFICATIONS
