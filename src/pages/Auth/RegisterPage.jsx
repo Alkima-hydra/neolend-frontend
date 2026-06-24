@@ -4,10 +4,10 @@ import { useAuth } from "../../context/AuthContext";
 import styles from "./RegisterPage.module.css";
 
 const FIELDS = [
-  { name: "fullName", label: "Nombre completo",       type: "text",     placeholder: "Juan Pérez" },
-  { name: "email",    label: "Correo electrónico",     type: "email",    placeholder: "juan@correo.com" },
-  { name: "password", label: "Contraseña",             type: "password", placeholder: "Mínimo 8 caracteres" },
-  { name: "confirm",  label: "Confirmar contraseña",   type: "password", placeholder: "Repite la contraseña" },
+  { name: "fullName", label: "Nombre completo",     type: "text",     placeholder: "Juan Pérez" },
+  { name: "email",    label: "Correo electrónico",   type: "email",    placeholder: "juan@correo.com" },
+  { name: "password", label: "Contraseña",           type: "password", placeholder: "Mínimo 12 caracteres, mayúscula, número y símbolo" },
+  { name: "confirm",  label: "Confirmar contraseña", type: "password", placeholder: "Repite la contraseña" },
 ];
 
 export default function RegisterPage() {
@@ -23,11 +23,14 @@ export default function RegisterPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    if (form.password !== form.confirm) { setError("Las contraseñas no coinciden"); return; }
+    if (form.password !== form.confirm) {
+      setError("Las contraseñas no coinciden");
+      return;
+    }
     setLoading(true);
     try {
       const res = await register(form.fullName, form.email, form.password);
-      setSuccess(res.message);
+      setSuccess(res.msg);
       setTimeout(() => navigate("/login"), 2000);
     } catch (err) {
       setError(err.message);
@@ -48,7 +51,14 @@ export default function RegisterPage() {
           {FIELDS.map((f) => (
             <div className={styles.field} key={f.name}>
               <label>{f.label}</label>
-              <input type={f.type} name={f.name} value={form[f.name]} onChange={change} placeholder={f.placeholder} required />
+              <input
+                type={f.type}
+                name={f.name}
+                value={form[f.name]}
+                onChange={change}
+                placeholder={f.placeholder}
+                required
+              />
             </div>
           ))}
           {error   && <div className={styles.error}>{error}</div>}
