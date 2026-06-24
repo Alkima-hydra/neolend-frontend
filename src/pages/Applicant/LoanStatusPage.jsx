@@ -1,37 +1,104 @@
 import { useState, useEffect } from "react";
 import { CreditCard } from "lucide-react";
-import { getInstallments, registerPayment } from "../../api/api";
+import { useAuth } from "../../context/AuthContext";
+import { getApplicantByUserId, getApplicationsByApplicant } from "../../api/api";
+import { getLoanInstallments, registerPayment } from "../../api/apiDisbursement";
 import styles from "../shared.module.css";
 
 const INS_CLS = { PENDING: styles.badgeBlue, PAID: styles.badgeGreen, OVERDUE: styles.badgeRed };
 
 export default function LoanStatusPage() {
+  const { user } = useAuth();
+
   const [installments, setInstallments] = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [paying, setPaying]             = useState(null);
-  const [success, setSuccess]           = useState("");
+  const [summary,      setSummary]      = useState(null);
+  const [loanId,       setLoanId]       = useState("loan1"); // fallback al seed
+  const [loading,      setLoading]      = useState(true);
+  const [paying,       setPaying]       = useState(null);
+  const [success,      setSuccess]      = useState("");
+  const [error,        setError]        = useState("");
 
   useEffect(() => {
-    getInstallments("loan1").then(setInstallments).finally(() => setLoading(false));
-  }, []);
+    const load = async () => {
+      try {
+        // 1. Obtener loanId real del usuario logueado
+        const applicant = await getApplicantByUserId(user.id);
+        const apps = await getApplicationsByApplicant(applicant.id);
+        const approved = apps.find((a) =>
+          a.status === "APPROVED" || a.status === "DISBURSED"
+        );
+        const resolvedLoanId = approved?.loanId || "loan1";
+        setLoanId(resolvedLoanId);
+
+        // 2. Llamar al backend real
+        const res = await getLoanInstallments(resolvedLoanId);
+        setSummary(res.summary);
+        setInstallments(res.data);
+      } catch {
+        // Fallback al seed del api.js si el backend falla
+        try {
+          const { getInstallments } = await import("../../api/api");
+          const ins = await getInstallments("loan1");
+          setInstallments(ins);
+        } catch { /* sin cuotas */ }
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [user.id]);
 
   async function handlePay(ins) {
     setPaying(ins.id);
+    setError("");
     try {
-      await registerPayment("loan1", ins.id, ins.amount, "WALLET");
+      await registerPayment({
+        loan_id:          loanId,
+        installment_id:   ins.id,
+        amount:           ins.amount,
+        payment_method:   "WALLET",
+        payment_reference: `PAY-${Date.now()}`,
+      });
+      // Actualizar estado local inmediatamente
       setInstallments((prev) =>
-        prev.map((i) => i.id === ins.id ? { ...i, status: "PAID", paidAt: new Date().toISOString() } : i)
+        prev.map((i) =>
+          i.id === ins.id
+            ? { ...i, status: "PAID", paid_at: new Date().toISOString() }
+            : i
+        )
       );
-      setSuccess(`Cuota #${ins.installmentNumber} registrada como pagada.`);
+      // Actualizar summary local
+      setSummary((prev) =>
+        prev
+          ? { ...prev, paid: (prev.paid || 0) + 1, pending: (prev.pending || 1) - 1 }
+          : prev
+      );
+      setSuccess(`Cuota #${ins.installment_number ?? ins.installmentNumber} registrada como pagada.`);
+    } catch (err) {
+      setError(err.message || "Error al registrar el pago");
     } finally {
       setPaying(null);
     }
   }
 
-  const loan   = { approvedAmount: 450, interestRate: 12.5, termMonths: 6, status: "ACTIVE" };
-  const paid   = installments.filter((i) => i.status === "PAID").length;
-  const total  = installments.reduce((a, i) => a + i.amount, 0);
-  const paidAmt = installments.filter((i) => i.status === "PAID").reduce((a, i) => a + i.amount, 0);
+  // Compatibilidad backend (snake_case) y seed (camelCase)
+  const normalize = (ins) => ({
+    id:                ins.id,
+    installmentNumber: ins.installment_number  ?? ins.installmentNumber,
+    dueDate:           ins.due_date            ?? ins.dueDate,
+    principalAmount:   ins.principal_amount    ?? ins.principalAmount,
+    interestAmount:    ins.interest_amount     ?? ins.interestAmount,
+    amount:            ins.amount,
+    status:            ins.status,
+    paidAt:            ins.paid_at             ?? ins.paidAt,
+  });
+
+  const normalized = installments.map(normalize);
+
+  const loan    = { approvedAmount: 450, interestRate: 12.5, termMonths: 6, status: "ACTIVE" };
+  const paid    = summary?.paid    ?? normalized.filter((i) => i.status === "PAID").length;
+  const total   = normalized.reduce((a, i) => a + Number(i.amount), 0);
+  const paidAmt = normalized.filter((i) => i.status === "PAID").reduce((a, i) => a + Number(i.amount), 0);
 
   if (loading) return <div className={styles.loading}>Cargando préstamo...</div>;
 
@@ -43,14 +110,15 @@ export default function LoanStatusPage() {
       </div>
 
       {success && <div className={styles.success}>{success}</div>}
+      {error   && <div className={styles.error}>{error}</div>}
 
       <div className={styles.statGrid}>
         {[
-          { label: "Monto aprobado",    value: `USD ${loan.approvedAmount}` },
-          { label: "Tasa anual",        value: `${loan.interestRate}%` },
-          { label: "Cuotas pagadas",    value: `${paid} / ${loan.termMonths}` },
-          { label: "Pagado hasta hoy",  value: `USD ${paidAmt.toFixed(2)}` },
-          { label: "Saldo pendiente",   value: `USD ${(total - paidAmt).toFixed(2)}` },
+          { label: "Monto aprobado",   value: `USD ${loan.approvedAmount}` },
+          { label: "Tasa anual",       value: `${loan.interestRate}%` },
+          { label: "Cuotas pagadas",   value: `${paid} / ${loan.termMonths}` },
+          { label: "Pagado hasta hoy", value: `USD ${paidAmt.toFixed(2)}` },
+          { label: "Saldo pendiente",  value: `USD ${(total - paidAmt).toFixed(2)}` },
         ].map((s) => (
           <div className={styles.statCard} key={s.label}>
             <div className={styles.statValue} style={{ fontSize: "1.25rem" }}>{s.value}</div>
@@ -88,13 +156,13 @@ export default function LoanStatusPage() {
               </tr>
             </thead>
             <tbody>
-              {installments.map((ins) => (
+              {normalized.map((ins) => (
                 <tr key={ins.id}>
                   <td style={{ fontWeight: 600, color: "#0f172a" }}>{ins.installmentNumber}</td>
                   <td>{new Date(ins.dueDate).toLocaleDateString()}</td>
-                  <td>USD {ins.principalAmount.toFixed(2)}</td>
-                  <td>USD {ins.interestAmount.toFixed(2)}</td>
-                  <td style={{ fontWeight: 600 }}>USD {ins.amount.toFixed(2)}</td>
+                  <td>USD {Number(ins.principalAmount).toFixed(2)}</td>
+                  <td>USD {Number(ins.interestAmount).toFixed(2)}</td>
+                  <td style={{ fontWeight: 600 }}>USD {Number(ins.amount).toFixed(2)}</td>
                   <td>
                     <span className={`${styles.badge} ${INS_CLS[ins.status] || styles.badgeGray}`}>
                       {ins.status}
