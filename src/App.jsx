@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ShieldOff } from "lucide-react";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
@@ -32,9 +33,9 @@ import UsersPage from "./pages/Admin/UsersPage";
 function UnauthorizedPage() {
   return (
     <Layout>
-      <div style={{ textAlign: "center", padding: "4rem", color: "#f87171" }}>
-        <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🚫</div>
-        <h2 style={{ color: "#f1f5f9" }}>Acceso no autorizado</h2>
+      <div style={{ textAlign: "center", padding: "4rem" }}>
+        <ShieldOff size={40} color="#dc2626" style={{ marginBottom: "1rem" }} />
+        <h2 style={{ color: "#0f172a" }}>Acceso no autorizado</h2>
         <p style={{ color: "#64748b" }}>No tienes permisos para acceder a esta sección.</p>
       </div>
     </Layout>

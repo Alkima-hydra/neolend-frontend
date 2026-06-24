@@ -19,8 +19,8 @@ export default function Navbar() {
       </Link>
       {user && (
         <div className={styles.right}>
-          <span className={styles.userName}>{user.fullName}</span>
-          <span className={styles.roleBadge}>{user.role.replace("_", " ")}</span>
+          <span className={styles.userName}>{user.fullName || user.full_name}</span>
+          <span className={styles.roleBadge}>{user.role?.replace("_", " ")}</span>
           <button className={styles.logoutBtn} onClick={handleLogout}>
             <LogOut size={14} />
             Salir

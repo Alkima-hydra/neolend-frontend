@@ -1,11 +1,25 @@
-import { useState, useEffect } from "react";
-import { TrendingUp, TrendingDown } from "lucide-react";
-import { getAllApplications, getScoringExplanation, getCurrentModel } from "../../api/api";
+import { useState, useEffect, useCallback } from "react";
+import { TrendingUp, TrendingDown, Loader2, GitCompare, Gauge, Activity } from "lucide-react";
+import {
+  listApplications, getScoringExplanation, getCurrentModel,
+  switchModel, evaluateScoring, getCircuitBreakerStatus,
+} from "../../api/scoringApi";
 import styles from "../shared.module.css";
+
+const RISK_COLOR = { LOW: "#16a34a", MEDIUM: "#d97706", HIGH: "#dc2626" };
+const CIRCUIT_CLS = { CLOSED: "badgeGreen", HALF_OPEN: "badgeYellow", OPEN: "badgeRed" };
+
+function Spinner({ label }) {
+  return (
+    <div className={styles.loading}>
+      <Loader2 size={16} className={styles.spin} /> {label}
+    </div>
+  );
+}
 
 function ShapRow({ label, value }) {
   const pos = value >= 0;
-  const w   = Math.min(Math.abs(value) * 300, 100);
+  const w = Math.min(Math.abs(value) * 300, 100);
   return (
     <tr>
       <td>
@@ -34,21 +48,76 @@ function ShapRow({ label, value }) {
 }
 
 export default function ScoringExplanationPage() {
-  const [apps, setApps]             = useState([]);
-  const [selectedId, setSelectedId] = useState("app1");
+  const [apps, setApps] = useState([]);
+  const [selectedId, setSelectedId] = useState("");
   const [explanation, setExplanation] = useState(null);
-  const [model, setModel]           = useState(null);
-  const [loading, setLoading]       = useState(false);
+  const [model, setModel] = useState(null);
+  const [circuit, setCircuit] = useState(null);
 
-  useEffect(() => {
-    getAllApplications().then(setApps);
-    getCurrentModel().then(setModel);
+  const [loadingApps, setLoadingApps] = useState(true);
+  const [loadingExplanation, setLoadingExplanation] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const [evaluating, setEvaluating] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const loadModel = useCallback(() => {
+    getCurrentModel().then(setModel).catch((e) => setError(e.message));
+    getCircuitBreakerStatus().then(setCircuit).catch(() => {});
   }, []);
 
   useEffect(() => {
-    setLoading(true);
-    getScoringExplanation(selectedId).then(setExplanation).catch(() => setExplanation(null)).finally(() => setLoading(false));
+    loadModel();
+    listApplications({ limit: 50 })
+      .then((list) => {
+        setApps(list);
+        if (list.length > 0) setSelectedId(list[0].application_id);
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoadingApps(false));
+  }, [loadModel]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    setLoadingExplanation(true);
+    setExplanation(null);
+    setNotice("");
+    getScoringExplanation(selectedId)
+      .then(setExplanation)
+      .catch((e) => setNotice(e.message))
+      .finally(() => setLoadingExplanation(false));
   }, [selectedId]);
+
+  async function handleGenerateScore() {
+    const app = apps.find((a) => a.application_id === selectedId);
+    if (!app) return;
+    setEvaluating(true);
+    setError("");
+    try {
+      await evaluateScoring(app.application_id, app.applicant_id, Number(app.requested_amount));
+      const exp = await getScoringExplanation(selectedId);
+      setExplanation(exp);
+      setNotice("");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setEvaluating(false);
+    }
+  }
+
+  async function handleSwitchModel() {
+    if (!model) return;
+    setSwitching(true);
+    setError("");
+    try {
+      await switchModel(model.standbyModel);
+      loadModel();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSwitching(false);
+    }
+  }
 
   return (
     <div className={styles.page}>
@@ -57,49 +126,85 @@ export default function ScoringExplanationPage() {
         <p className={styles.pageSubtitle}>Análisis SHAP del modelo de scoring crediticio — Blue/Green Deployment</p>
       </div>
 
+      {error && <div className={styles.error}>{error}</div>}
+
       {model && (
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Modelo en producción</h3>
+          <h3 className={styles.cardTitle} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <GitCompare size={15} /> Modelo en producción
+          </h3>
           <div className={styles.grid3}>
-            <div className={styles.infoRow} style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-              <span className={styles.infoLabel}>Versión</span>
-              <span style={{ fontWeight: 600, color: "#0f172a" }}>{model.version}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span className={styles.infoLabel}>Activo</span>
+              <span style={{ fontWeight: 700, color: "#0f172a" }}>{model.activeModel}</span>
             </div>
-            <div className={styles.infoRow} style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-              <span className={styles.infoLabel}>Precisión</span>
-              <span style={{ fontWeight: 600, color: "#0f172a" }}>{(model.accuracy * 100).toFixed(1)}%</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span className={styles.infoLabel}>Standby</span>
+              <span style={{ fontWeight: 600, color: "#64748b" }}>{model.standbyModel}</span>
             </div>
-            <div className={styles.infoRow} style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-              <span className={styles.infoLabel}>Estrategia de despliegue</span>
-              <span className={`${styles.badge} ${styles.badgeGreen}`}>Blue/Green — {model.active}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span className={styles.infoLabel}>Estrategia</span>
+              <span className={`${styles.badge} ${styles.badgeGreen}`}>{model.strategy}</span>
             </div>
           </div>
+          <div className={styles.btnRow}>
+            <button className={styles.btnSecondary} onClick={handleSwitchModel} disabled={switching}>
+              {switching ? <Loader2 size={14} className={styles.spin} /> : <GitCompare size={14} />}
+              {switching ? "Cambiando..." : `Cambiar a ${model.standbyModel} (sin downtime)`}
+            </button>
+          </div>
+          {circuit && (
+            <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <Activity size={13} color="#94a3b8" />
+              <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Circuit breaker buró de crédito:</span>
+              <span className={`${styles.badge} ${styles[CIRCUIT_CLS[circuit.state]] || styles.badgeGray}`}>{circuit.state}</span>
+              <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>{circuit.cachedKeys} claves en caché</span>
+            </div>
+          )}
         </div>
       )}
 
       <div className={styles.card}>
         <h3 className={styles.cardTitle}>Seleccionar solicitud</h3>
-        <div className={styles.field}>
-          <label>Solicitud a analizar</label>
-          <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
-            {apps.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.id} — USD {a.requestedAmount} — {a.status}
-              </option>
-            ))}
-          </select>
-        </div>
+        {loadingApps ? (
+          <Spinner label="Cargando solicitudes..." />
+        ) : apps.length === 0 ? (
+          <div className={styles.emptyState}>No hay solicitudes registradas todavía.</div>
+        ) : (
+          <div className={styles.field}>
+            <label>Solicitud a analizar</label>
+            <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
+              {apps.map((a) => (
+                <option key={a.application_id} value={a.application_id}>
+                  {a.application_id.slice(0, 8)}… — USD {Number(a.requested_amount).toLocaleString()} — {a.status}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
-      {loading && <div className={styles.loading}>Calculando explicación...</div>}
+      {loadingExplanation && <Spinner label="Calculando explicación..." />}
 
-      {explanation && !loading && (
+      {!loadingExplanation && notice && (
+        <div className={styles.card}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+            <span style={{ color: "#94a3b8", fontSize: "0.875rem" }}>{notice}</span>
+            <button className={styles.btnPrimary} onClick={handleGenerateScore} disabled={evaluating}>
+              {evaluating ? <Loader2 size={14} className={styles.spin} /> : <Gauge size={14} />}
+              {evaluating ? "Calculando score..." : "Generar score ahora"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {explanation && !loadingExplanation && (
         <>
           <div className={styles.card} style={{ textAlign: "center", paddingBlock: "1.75rem" }}>
             <div style={{ fontSize: "0.8125rem", color: "#94a3b8", marginBottom: "0.5rem" }}>Score calculado</div>
             <div style={{
               fontSize: "4rem", fontWeight: 800, letterSpacing: "-2px", lineHeight: 1,
-              color: explanation.riskLevel === "LOW" ? "#16a34a" : explanation.riskLevel === "HIGH" ? "#dc2626" : "#d97706",
+              color: RISK_COLOR[explanation.riskLevel] || "#64748b",
             }}>{explanation.score}</div>
             <div style={{ marginTop: "0.875rem" }}>
               <span className={`${styles.badge} ${explanation.riskLevel === "LOW" ? styles.badgeGreen : explanation.riskLevel === "HIGH" ? styles.badgeRed : styles.badgeYellow}`}>
@@ -111,7 +216,7 @@ export default function ScoringExplanationPage() {
           <div className={styles.card}>
             <h3 className={styles.cardTitle}>Valores SHAP — Contribución por variable</h3>
             <p style={{ fontSize: "0.8125rem", color: "#64748b", marginBottom: "1rem" }}>
-              {explanation.explanation}
+              Contribución relativa de cada fuente de datos alternativa al score final. Valores positivos suman, negativos restan.
             </p>
             <div className={styles.tableWrap}>
               <table className={styles.table}>
@@ -121,8 +226,8 @@ export default function ScoringExplanationPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(explanation.shapValues).map(([k, v]) => (
-                    <ShapRow key={k} label={k} value={v} />
+                  {explanation.explanation.map((row) => (
+                    <ShapRow key={row.factor} label={row.factor} value={row.impact} />
                   ))}
                 </tbody>
               </table>
