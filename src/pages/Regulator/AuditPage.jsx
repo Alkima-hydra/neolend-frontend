@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link2, FileText, ClipboardList } from "lucide-react";
-import { getAuditEvents, getDecisionAudit, getRegulatoryReport } from "../../api/api";
+import { getAuditEvents, getDecisionAudit, getRegulatoryReport } from "../../api/AuditApi";
 import styles from "../shared.module.css";
 
 const TABS = [
@@ -17,7 +17,7 @@ export default function AuditPage() {
   const [activeTab, setActiveTab] = useState("events");
 
   useEffect(() => {
-    Promise.all([getAuditEvents("app1"), getDecisionAudit("app1"), getRegulatoryReport()])
+    Promise.all([getAuditEvents(), getDecisionAudit(), getRegulatoryReport()])
       .then(([ev, au, rep]) => { setEvents(ev); setAudit(au); setReport(rep); })
       .finally(() => setLoading(false));
   }, []);

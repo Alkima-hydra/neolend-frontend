@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { TrendingUp, AlertTriangle } from "lucide-react";
-import { getInvestorDashboard, getPortfolioRisk, getCashflow } from "../../api/api";
+import { getInvestorDashboard, getPortfolioRisk, getCashflow } from "../../api/AuditApi";
 import styles from "../shared.module.css";
 
 export default function InvestorDashboard() {
